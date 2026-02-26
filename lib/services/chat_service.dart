@@ -1,0 +1,358 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/chat_request_model.dart';
+import '../models/chat_room_model.dart';
+import '../models/message_model.dart';
+import '../models/user_model.dart';
+import 'notification_service.dart';
+
+class ChatService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
+
+  static const int chatRequestCost = 100; // 채팅 신청 비용
+
+  // ========== 채팅 신청 ==========
+
+  // 채팅 신청 보내기
+  Future<bool> sendChatRequest({
+    required String fromUserId,
+    required String toUserId,
+    required UserModel fromUser,
+    String? message,
+  }) async {
+    // 포인트 확인
+    final userDoc = await _firestore.collection('users').doc(fromUserId).get();
+    final currentPoints = userDoc.data()?['points'] ?? 0;
+
+    if (currentPoints < chatRequestCost) {
+      return false; // 포인트 부족
+    }
+
+    // 이미 보낸 신청이 있는지 확인
+    final existingRequest = await _firestore
+        .collection('chatRequests')
+        .where('fromUserId', isEqualTo: fromUserId)
+        .where('toUserId', isEqualTo: toUserId)
+        .where('status', isEqualTo: 'pending')
+        .get();
+
+    if (existingRequest.docs.isNotEmpty) {
+      return false; // 이미 신청 중
+    }
+
+    final batch = _firestore.batch();
+
+    // 포인트 차감
+    final userRef = _firestore.collection('users').doc(fromUserId);
+    batch.update(userRef, {
+      'points': FieldValue.increment(-chatRequestCost),
+    });
+
+    // 채팅 신청 생성
+    final requestRef = _firestore.collection('chatRequests').doc();
+    final now = DateTime.now();
+    batch.set(requestRef, {
+      'fromUserId': fromUserId,
+      'toUserId': toUserId,
+      'fromUserNickname': fromUser.nickname,
+      'fromUserProfileImageUrl': fromUser.profileImageUrl,
+      'fromUserGender': fromUser.gender,
+      'message': message,
+      'pointsSpent': chatRequestCost,
+      'status': 'pending',
+      'createdAt': Timestamp.fromDate(now),
+      'respondedAt': null,
+      'expiresAt': Timestamp.fromDate(now.add(const Duration(days: 7))),
+    });
+
+    // 상대방 receivedRequestCount 증가
+    final toUserRef = _firestore.collection('users').doc(toUserId);
+    batch.update(toUserRef, {
+      'receivedRequestCount': FieldValue.increment(1),
+    });
+
+    await batch.commit();
+
+    // 알림 전송
+    await _notificationService.sendChatRequestNotification(
+      toUserId: toUserId,
+      fromUserId: fromUserId,
+      fromUserGender: fromUser.gender,
+    );
+
+    return true;
+  }
+
+  // 받은 채팅 신청 목록
+  Stream<List<ChatRequestModel>> getReceivedRequests(String userId) {
+    return _firestore
+        .collection('chatRequests')
+        .where('toUserId', isEqualTo: userId)
+        .where('status', isEqualTo: 'pending')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => ChatRequestModel.fromFirestore(doc))
+          .where((request) => !request.isExpired)
+          .toList();
+    });
+  }
+
+  // 보낸 채팅 신청 목록
+  Stream<List<ChatRequestModel>> getSentRequests(String userId) {
+    return _firestore
+        .collection('chatRequests')
+        .where('fromUserId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => ChatRequestModel.fromFirestore(doc))
+          .toList();
+    });
+  }
+
+  // 채팅 신청 수락
+  Future<String> acceptRequest(ChatRequestModel request, UserModel myUser) async {
+    final batch = _firestore.batch();
+
+    // 신청 상태 변경
+    final requestRef = _firestore.collection('chatRequests').doc(request.id);
+    batch.update(requestRef, {
+      'status': 'accepted',
+      'respondedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 내 receivedRequestCount 감소
+    final myUserRef = _firestore.collection('users').doc(request.toUserId);
+    batch.update(myUserRef, {
+      'receivedRequestCount': FieldValue.increment(-1),
+    });
+
+    // 채팅방 생성
+    final chatRoomRef = _firestore.collection('chatRooms').doc();
+    batch.set(chatRoomRef, {
+      'participants': [request.fromUserId, request.toUserId],
+      'participantProfiles': {
+        request.fromUserId: {
+          'nickname': request.fromUserNickname,
+          'profileImageUrl': request.fromUserProfileImageUrl,
+          'gender': request.fromUserGender,
+        },
+        request.toUserId: {
+          'nickname': myUser.nickname,
+          'profileImageUrl': myUser.profileImageUrl,
+          'gender': myUser.gender,
+        },
+      },
+      'lastMessage': '',
+      'lastMessageAt': null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'isActive': true,
+    });
+
+    await batch.commit();
+
+    // 알림 전송 (신청자에게)
+    await _notificationService.sendChatAcceptedNotification(
+      toUserId: request.fromUserId,
+      chatRoomId: chatRoomRef.id,
+      accepterGender: myUser.gender,
+    );
+
+    return chatRoomRef.id;
+  }
+
+  // 채팅 신청 거절
+  Future<void> rejectRequest(ChatRequestModel request) async {
+    final batch = _firestore.batch();
+
+    // 신청 상태 변경
+    final requestRef = _firestore.collection('chatRequests').doc(request.id);
+    batch.update(requestRef, {
+      'status': 'rejected',
+      'respondedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 내 receivedRequestCount 감소
+    final myUserRef = _firestore.collection('users').doc(request.toUserId);
+    batch.update(myUserRef, {
+      'receivedRequestCount': FieldValue.increment(-1),
+    });
+
+    await batch.commit();
+  }
+
+  // ========== 채팅방 ==========
+
+  // 내 채팅방 목록
+  Stream<List<ChatRoomModel>> getChatRooms(String userId) {
+    return _firestore
+        .collection('chatRooms')
+        .where('participants', arrayContains: userId)
+        .where('isActive', isEqualTo: true)
+        .orderBy('lastMessageAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => ChatRoomModel.fromFirestore(doc))
+          .toList();
+    });
+  }
+
+  // 채팅방 나가기
+  Future<void> leaveChatRoom(String chatRoomId) async {
+    await _firestore.collection('chatRooms').doc(chatRoomId).update({
+      'isActive': false,
+    });
+  }
+
+  // ========== 메시지 ==========
+
+  // 메시지 목록
+  Stream<List<MessageModel>> getMessages(String chatRoomId) {
+    return _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => MessageModel.fromFirestore(doc))
+          .where((msg) => !msg.isDeleted)
+          .toList();
+    });
+  }
+
+  // 메시지 보내기
+  Future<bool> sendMessage({
+    required String chatRoomId,
+    required String senderId,
+    required String content,
+    String? imageUrl,
+    String? voiceUrl,
+    int? voiceDuration,
+    String type = 'text',
+  }) async {
+    // 채팅방 정보 확인
+    final roomDoc = await _firestore.collection('chatRooms').doc(chatRoomId).get();
+    if (!roomDoc.exists) return false;
+    
+    final roomData = roomDoc.data()!;
+    final isActive = roomData['isActive'] ?? true;
+    
+    // 채팅방이 비활성화된 경우 (상대방 탈퇴 등)
+    if (!isActive) {
+      return false;
+    }
+
+    final batch = _firestore.batch();
+
+    // 메시지 추가
+    final messageRef = _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .doc();
+
+    batch.set(messageRef, {
+      'senderId': senderId,
+      'content': content,
+      'imageUrl': imageUrl,
+      'voiceUrl': voiceUrl,
+      'voiceDuration': voiceDuration,
+      'type': type,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+      'isDeleted': false,
+    });
+
+    // 채팅방 마지막 메시지 업데이트
+    final chatRoomRef = _firestore.collection('chatRooms').doc(chatRoomId);
+    String lastMessageText = content;
+    if (type == 'voice') {
+      lastMessageText = '🎤 음성 메시지';
+    } else if (type == 'image') {
+      lastMessageText = '📷 사진';
+    }
+    batch.update(chatRoomRef, {
+      'lastMessage': lastMessageText,
+      'lastMessageAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+
+    // 상대방에게 알림 전송
+    final participants = List<String>.from(roomData['participants'] ?? []);
+    final receiverId = participants.firstWhere((id) => id != senderId, orElse: () => '');
+    if (receiverId.isNotEmpty) {
+      final senderProfile = roomData['participantProfiles']?[senderId];
+      await _notificationService.sendNewMessageNotification(
+        toUserId: receiverId,
+        chatRoomId: chatRoomId,
+        senderId: senderId,
+        senderGender: senderProfile?['gender'] ?? 'male',
+        messagePreview: lastMessageText,
+      );
+    }
+
+    return true;
+  }
+
+  // 메시지 읽음 처리
+  Future<void> markAsRead(String chatRoomId, String myUserId) async {
+    final unreadMessages = await _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .where('isRead', isEqualTo: false)
+        .where('senderId', isNotEqualTo: myUserId)
+        .get();
+
+    final batch = _firestore.batch();
+    for (final doc in unreadMessages.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
+  // 특정 채팅방의 읽지 않은 메시지 수
+  Stream<int> getUnreadCount(String chatRoomId, String myUserId) {
+    return _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .where('isRead', isEqualTo: false)
+        .where('senderId', isNotEqualTo: myUserId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  // 전체 읽지 않은 메시지 수 (모든 채팅방)
+  Stream<int> getTotalUnreadCount(String myUserId) {
+    return _firestore
+        .collection('chatRooms')
+        .where('participants', arrayContains: myUserId)
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .asyncMap((roomSnapshot) async {
+      int totalUnread = 0;
+      
+      for (final room in roomSnapshot.docs) {
+        final unreadSnapshot = await _firestore
+            .collection('chatRooms')
+            .doc(room.id)
+            .collection('messages')
+            .where('isRead', isEqualTo: false)
+            .where('senderId', isNotEqualTo: myUserId)
+            .get();
+        
+        totalUnread += unreadSnapshot.docs.length;
+      }
+      
+      return totalUnread;
+    });
+  }
+}
