@@ -11,6 +11,7 @@ class ShotModel {
   final String? caption;
   final int viewCount;
   final int likeCount;
+  final int commentCount;
   final DateTime createdAt;
   final DateTime expiresAt;
   final bool isDeleted;
@@ -26,6 +27,7 @@ class ShotModel {
     this.caption,
     this.viewCount = 0,
     this.likeCount = 0,
+    this.commentCount = 0,
     required this.createdAt,
     required this.expiresAt,
     this.isDeleted = false,
@@ -70,6 +72,7 @@ class ShotModel {
       caption: data['caption'],
       viewCount: data['viewCount'] ?? 0,
       likeCount: data['likeCount'] ?? 0,
+      commentCount: data['commentCount'] ?? 0,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       expiresAt: (data['expiresAt'] as Timestamp?)?.toDate() ?? 
           DateTime.now().add(const Duration(hours: 24)),
@@ -88,6 +91,7 @@ class ShotModel {
       'caption': caption,
       'viewCount': viewCount,
       'likeCount': likeCount,
+      'commentCount': commentCount,
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
       'isDeleted': isDeleted,

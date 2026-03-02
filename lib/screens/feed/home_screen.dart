@@ -66,9 +66,18 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: _currentIndex == 1
             ? null
             : AppBar(
-                title: const Text(
-                  '피더',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                title: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.rss_feed, color: Colors.white, size: 18),
+                    ),
+                  ],
                 ),
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -651,41 +660,7 @@ class _PostCardState extends State<_PostCard> {
                     );
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Icons.block),
-                  title: const Text('이 사용자 차단'),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('사용자 차단'),
-                        content: const Text(
-                            '이 사용자를 차단하시겠습니까?\n차단하면 서로의 글을 볼 수 없습니다.'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('취소'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('차단',
-                                style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true && uid != null) {
-                      await _reportService.blockUser(uid, widget.post.authorId);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('사용자를 차단했습니다')),
-                        );
-                        widget.onDeleted();
-                      }
-                    }
-                  },
-                ),
+
               ],
               ListTile(
                 leading: const Icon(Icons.close),

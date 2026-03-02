@@ -8,10 +8,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../models/post_model.dart';
 import '../../models/comment_model.dart';
+import '../../models/report_model.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
+import '../../services/report_service.dart';
 import '../../services/s3_service.dart';
 import '../chat/chat_request_dialog.dart';
+import '../common/report_dialog.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final PostModel post;
@@ -26,6 +29,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _commentController = TextEditingController();
   final _postService = PostService();
   final _userService = UserService();
+  final _reportService = ReportService();
   final _focusNode = FocusNode();
   bool _isSubmitting = false;
   bool _isWarded = false;
@@ -35,8 +39,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   // 음성 녹음
   final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  final FlutterSoundPlayer _previewPlayer = FlutterSoundPlayer();
   bool _isRecorderInitialized = false;
+  bool _isPreviewPlayerInitialized = false;
   bool _isRecording = false;
+  bool _isPlayingPreview = false;
   int _recordDuration = 0;
   Timer? _recordTimer;
   String? _recordPath;
@@ -48,6 +55,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _wardCount = widget.post.wardCount;
     _checkWarded();
     _initRecorder();
+    _initPreviewPlayer();
   }
 
   Future<void> _initRecorder() async {
@@ -58,6 +66,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       debugPrint('Recorder init error: $e');
     }
   }
+  
+  Future<void> _initPreviewPlayer() async {
+    try {
+      await _previewPlayer.openPlayer();
+      _isPreviewPlayerInitialized = true;
+    } catch (e) {
+      debugPrint('Preview player init error: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -66,6 +83,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _recordTimer?.cancel();
     if (_isRecorderInitialized) {
       _recorder.closeRecorder();
+    }
+    if (_isPreviewPlayerInitialized) {
+      _previewPlayer.closePlayer();
     }
     super.dispose();
   }
@@ -194,6 +214,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   // 녹음 삭제
   void _removeVoice() {
+    if (_isPlayingPreview) {
+      _previewPlayer.stopPlayer();
+      _isPlayingPreview = false;
+    }
     if (_recordPath != null) {
       try {
         File(_recordPath!).delete();
@@ -203,6 +227,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       _recordPath = null;
       _voiceDuration = null;
     });
+  }
+  
+  // 녹음 미리듣기
+  Future<void> _playPausePreview() async {
+    if (!_isPreviewPlayerInitialized || _recordPath == null) return;
+    
+    if (_isPlayingPreview) {
+      await _previewPlayer.stopPlayer();
+      setState(() => _isPlayingPreview = false);
+    } else {
+      setState(() => _isPlayingPreview = true);
+      await _previewPlayer.startPlayer(
+        fromURI: _recordPath,
+        whenFinished: () {
+          if (mounted) setState(() => _isPlayingPreview = false);
+        },
+      );
+    }
   }
 
   String _formatDuration(int seconds) {
@@ -302,10 +344,44 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         foregroundColor: Colors.black,
         elevation: 0.5,
         actions: [
-          if (isAuthor)
-            IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              onPressed: () async {
+          // 더보기 메뉴 (신고/차단)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              if (value == 'report') {
+                showReportDialog(
+                  context,
+                  targetId: widget.post.id,
+                  targetType: ReportTargetType.post,
+                );
+              } else if (value == 'block') {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('사용자 차단'),
+                    content: const Text('이 사용자를 차단하시겠습니까?\n차단된 사용자의 글과 댓글이 보이지 않게 됩니다.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('취소'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('차단', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await _reportService.blockUser(uid!, widget.post.authorId);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('사용자를 차단했습니다')),
+                    );
+                    Navigator.pop(context);
+                  }
+                }
+              } else if (value == 'delete') {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
@@ -323,13 +399,48 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ],
                   ),
                 );
-
                 if (confirm == true) {
                   await _postService.deletePost(widget.post.id);
                   if (mounted) Navigator.pop(context);
                 }
-              },
-            ),
+              }
+            },
+            itemBuilder: (context) => [
+              if (!isAuthor) ...[
+                const PopupMenuItem(
+                  value: 'report',
+                  child: Row(
+                    children: [
+                      Icon(Icons.flag_outlined, size: 20),
+                      SizedBox(width: 8),
+                      Text('신고하기'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'block',
+                  child: Row(
+                    children: [
+                      Icon(Icons.block, size: 20),
+                      SizedBox(width: 8),
+                      Text('이 사용자 차단'),
+                    ],
+                  ),
+                ),
+              ],
+              if (isAuthor)
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('삭제하기', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
       body: Column(
@@ -521,6 +632,41 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               );
                             },
                             onChatRequest: () => _showChatRequestDialog(comment.authorId),
+                            onReport: () {
+                              showReportDialog(
+                                context,
+                                targetId: comment.id,
+                                targetType: ReportTargetType.comment,
+                              );
+                            },
+                            onBlock: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('사용자 차단'),
+                                  content: const Text('이 사용자를 차단하시겠습니까?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('취소'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text('차단', style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true && mounted) {
+                                final uid = FirebaseAuth.instance.currentUser?.uid;
+                                if (uid != null) {
+                                  await _reportService.blockUser(uid, comment.authorId);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('사용자를 차단했습니다')),
+                                  );
+                                }
+                              }
+                            },
                           );
                         },
                       );
@@ -565,7 +711,23 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               color: Colors.grey[100],
               child: Row(
                 children: [
-                  const Icon(Icons.mic, color: Color(0xFF6C63FF), size: 20),
+                  // 재생/일시정지 버튼
+                  GestureDetector(
+                    onTap: _playPausePreview,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6C63FF),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        _isPlayingPreview ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     '음성 ${_formatDuration(_voiceDuration ?? 0)}',
@@ -703,6 +865,8 @@ class _CommentItem extends StatefulWidget {
   final VoidCallback onReply;
   final VoidCallback onDelete;
   final VoidCallback onChatRequest;
+  final VoidCallback onReport;
+  final VoidCallback onBlock;
 
   const _CommentItem({
     required this.comment,
@@ -710,6 +874,8 @@ class _CommentItem extends StatefulWidget {
     required this.onReply,
     required this.onDelete,
     required this.onChatRequest,
+    required this.onReport,
+    required this.onBlock,
   });
 
   @override
@@ -892,6 +1058,28 @@ class _CommentItemState extends State<_CommentItem> {
                           onTap: widget.onChatRequest,
                           child: Text(
                             '채팅 신청',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        GestureDetector(
+                          onTap: widget.onReport,
+                          child: Text(
+                            '신고',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        GestureDetector(
+                          onTap: widget.onBlock,
+                          child: Text(
+                            '차단',
                             style: TextStyle(
                               color: Colors.grey[500],
                               fontSize: 12,

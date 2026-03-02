@@ -11,8 +11,8 @@ import '../../models/shot_model.dart';
 import '../../models/report_model.dart';
 import '../../services/shot_service.dart';
 import '../../services/user_service.dart';
-import '../../services/report_service.dart';
 import '../../services/s3_service.dart';
+import '../../core/widgets/ad_widgets.dart';
 import '../common/report_dialog.dart';
 import '../chat/chat_request_dialog.dart';
 
@@ -23,24 +23,53 @@ class ShotsScreen extends StatefulWidget {
   State<ShotsScreen> createState() => ShotsScreenState();
 }
 
-class ShotsScreenState extends State<ShotsScreen> {
+class ShotsScreenState extends State<ShotsScreen>
+    with SingleTickerProviderStateMixin {
   final _shotService = ShotService();
-  final _pageController = PageController();
+  final _userService = UserService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
+  late TabController _tabController;
+  bool _isPremium = false;
+  final _interstitialController = InterstitialAdController();
+  int _shotsViewedCount = 0; // 3개마다 전면광고
 
+  // ── 둘러보기 탭
+  final _pageController = PageController();
   List<ShotModel> _shots = [];
   bool _isLoading = true;
-  bool _isReplayMode = false;  // 다시보기 모드
+  bool _isReplayMode = false;
+
+  // ── 내 Shot 탭
+  List<ShotModel> _myShots = [];
+  bool _isMyLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+      if (_tabController.index == 1 && _isMyLoading) {
+        _loadMyShots();
+      }
+    });
     _loadShots();
+    _loadPremiumStatus();
+    _interstitialController.preload();
+  }
+
+  Future<void> _loadPremiumStatus() async {
+    final user = await _userService.getUser(_uid);
+    if (mounted && user != null) {
+      setState(() => _isPremium = user.isPremium);
+    }
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _pageController.dispose();
+    _interstitialController.dispose();
     super.dispose();
   }
 
@@ -48,33 +77,32 @@ class ShotsScreenState extends State<ShotsScreen> {
     setState(() => _isLoading = true);
     try {
       final shots = await _shotService.getUnviewedShots(_uid);
-      if (mounted) {
-        setState(() {
-          _shots = shots;
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() { _shots = shots; _isLoading = false; });
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // 외부에서 호출 가능
+  Future<void> _loadMyShots() async {
+    setState(() => _isMyLoading = true);
+    try {
+      final stream = _shotService.getMyShotsStream(_uid);
+      final shots = await stream.first;
+      if (mounted) setState(() { _myShots = shots; _isMyLoading = false; });
+    } catch (e) {
+      if (mounted) setState(() => _isMyLoading = false);
+    }
+  }
+
   Future<void> refresh() async {
     _isReplayMode = false;
     await _loadShots();
+    if (_tabController.index == 1) await _loadMyShots();
   }
 
-  // 다시보기 모드 토글
   void _toggleReplayMode() {
     final newMode = !_isReplayMode;
-    setState(() {
-      _isReplayMode = newMode;
-      _shots = []; // 먼저 목록 초기화
-    });
-    
+    setState(() { _isReplayMode = newMode; _shots = []; });
     if (newMode) {
       _loadAllShots();
     } else {
@@ -85,19 +113,11 @@ class ShotsScreenState extends State<ShotsScreen> {
   Future<void> _loadAllShots() async {
     setState(() => _isLoading = true);
     try {
-      // 모든 Shots 가져오기 (조회 여부 관계없이)
-      final stream = _shotService.getShotsStream();
+      final stream = _shotService.getShotsStream(excludeUserId: _uid);
       final shots = await stream.first;
-      if (mounted) {
-        setState(() {
-          _shots = shots;
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() { _shots = shots; _isLoading = false; });
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -109,80 +129,210 @@ class ShotsScreenState extends State<ShotsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Row(
-          children: [
-            const Text(
-              'Shots',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+        flexibleSpace: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                // 탭
+                Expanded(
+                  child: TabBar(
+                    controller: _tabController,
+                    indicatorColor: Colors.white,
+                    indicatorWeight: 2,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white54,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    tabs: const [
+                      Tab(text: 'Shots'),
+                      Tab(text: '내 Shot'),
+                    ],
+                  ),
+                ),
+                // 액션 버튼들 (둘러보기 탭에서만)
+                if (_tabController.index == 0) ...[
+                  IconButton(
+                    icon: Icon(
+                      _isReplayMode ? Icons.fiber_new : Icons.replay,
+                      color: Colors.white,
+                    ),
+                    onPressed: _toggleReplayMode,
+                  ),
+                ],
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+                  onPressed: _createShot,
+                ),
+              ],
             ),
-            if (_isReplayMode) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  '다시보기',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
-        actions: [
-          // 다시보기 토글 버튼
-          IconButton(
-            icon: Icon(
-              _isReplayMode ? Icons.fiber_new : Icons.replay,
-              color: Colors.white,
-            ),
-            tooltip: _isReplayMode ? '새 Shots 보기' : '다시보기',
-            onPressed: _toggleReplayMode,
-          ),
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline, color: Colors.white),
-            onPressed: _createShot,
-          ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          _buildShotsTab(),
+          _buildMyShotsTab(),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : _shots.isEmpty
-              ? _buildEmptyState()
-              : PageView.builder(
-                  controller: _pageController,
-                  scrollDirection: Axis.vertical,
-                  itemCount: _shots.length,
-                  onPageChanged: (index) {
-                    // 다시보기 모드가 아닐 때만 조회 기록 저장
-                    if (!_isReplayMode) {
-                      _shotService.markAsViewed(_shots[index].id, _uid);
-                    }
-                  },
-                  itemBuilder: (context, index) {
-                    return _ShotItem(
-                      shot: _shots[index],
-                      onDelete: () {
-                        setState(() {
-                          _shots.removeAt(index);
-                        });
-                        if (index < _shots.length) {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        }
-                      },
-                    );
-                  },
+    );
+  }
+
+  // ── 둘러보기 탭
+  Widget _buildShotsTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_shots.isEmpty) return _buildEmptyState();
+    return PageView.builder(
+      controller: _pageController,
+      scrollDirection: Axis.vertical,
+      itemCount: _shots.length,
+      onPageChanged: (index) {
+        if (!_isReplayMode) {
+          _shotService.markAsViewed(_shots[index].id, _uid);
+        }
+        // 3개마다 전면 광고 (프리미엄 제외)
+        _shotsViewedCount++;
+        if (!_isPremium && _shotsViewedCount % 3 == 0) {
+          _interstitialController.show(isPremium: false);
+        }
+      },
+      itemBuilder: (context, index) {
+        return _ShotItem(
+          shot: _shots[index],
+          isOwner: false,
+          onDelete: () {
+            setState(() => _shots.removeAt(index));
+            if (index < _shots.length) {
+              _pageController.nextPage(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          },
+        );
+      },
+    );
+  }
+
+  // ── 내 Shot 탭
+  Widget _buildMyShotsTab() {
+    if (_isMyLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_myShots.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.photo_camera_outlined, size: 64, color: Colors.grey[700]),
+            const SizedBox(height: 16),
+            const Text('올린 Shot이 없어요', style: TextStyle(color: Colors.grey, fontSize: 16)),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _createShot,
+              icon: const Icon(Icons.add),
+              label: const Text('Shot 올리기'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6C63FF),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.only(top: 100, left: 2, right: 2, bottom: 16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+        childAspectRatio: 9 / 16,
+      ),
+      itemCount: _myShots.length,
+      itemBuilder: (context, index) {
+        final shot = _myShots[index];
+        return GestureDetector(
+          onTap: () => _openMyShotDetail(index),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (shot.imageUrl != null)
+                CachedNetworkImage(
+                  imageUrl: shot.imageUrl!,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(color: Colors.grey[900]),
+                  errorWidget: (_, __, ___) => Container(
+                    color: Colors.grey[900],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
+                )
+              else
+                Container(color: Colors.grey[900], child: const Icon(Icons.mic, color: Colors.grey)),
+              // 만료 오버레이
+              Positioned(
+                bottom: 4,
+                left: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    shot.remainingTimeText,
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                  ),
                 ),
+              ),
+              // 댓글 수
+              if (shot.commentCount > 0)
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.comment, color: Colors.white, size: 10),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${shot.commentCount}',
+                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _openMyShotDetail(int index) {
+    // 풀스크린 뷰어로 열기
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _MyShotFullScreen(
+          shots: _myShots,
+          initialIndex: index,
+          onDelete: () {
+            _loadMyShots();
+          },
+        ),
+      ),
     );
   }
 
@@ -191,27 +341,15 @@ class ShotsScreenState extends State<ShotsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.photo_camera_outlined,
-            size: 64,
-            color: Colors.grey,
-          ),
+          const Icon(Icons.photo_camera_outlined, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text(
-            '새로운 Shots가 없어요',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey,
-            ),
+          Text(
+            _isReplayMode ? '다시볼 Shots가 없어요' : '새로운 Shots가 없어요',
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '첫 번째 Shot을 올려보세요!',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
-          ),
+          const Text('첫 번째 Shot을 올려보세요!',
+              style: TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _createShot,
@@ -220,10 +358,6 @@ class ShotsScreenState extends State<ShotsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6C63FF),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 12,
-              ),
             ),
           ),
         ],
@@ -234,16 +368,75 @@ class ShotsScreenState extends State<ShotsScreen> {
   Future<void> _createShot() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const _ShotCreateScreen(),
-      ),
+      MaterialPageRoute(builder: (context) => const _ShotCreateScreen()),
     );
-    
     if (result == true) {
       _loadShots();
+      _loadMyShots();
     }
   }
 }
+
+// ── 내 Shot 풀스크린 뷰어
+class _MyShotFullScreen extends StatefulWidget {
+  final List<ShotModel> shots;
+  final int initialIndex;
+  final VoidCallback onDelete;
+
+  const _MyShotFullScreen({
+    required this.shots,
+    required this.initialIndex,
+    required this.onDelete,
+  });
+
+  @override
+  State<_MyShotFullScreen> createState() => _MyShotFullScreenState();
+}
+
+class _MyShotFullScreenState extends State<_MyShotFullScreen> {
+  late PageController _pageController;
+  late List<ShotModel> _shots;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _shots = List.from(widget.shots);
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        itemCount: _shots.length,
+        onPageChanged: (i) => setState(() => _currentIndex = i),
+        itemBuilder: (context, index) {
+          return _ShotItem(
+            shot: _shots[index],
+            isOwner: true,
+            onDelete: () {
+              setState(() => _shots.removeAt(index));
+              widget.onDelete();
+              if (_shots.isEmpty) Navigator.pop(context);
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 // Shot 생성 화면 (녹음 포함)
 class _ShotCreateScreen extends StatefulWidget {
@@ -655,10 +848,12 @@ class _ShotCreateScreenState extends State<_ShotCreateScreen> {
 class _ShotItem extends StatefulWidget {
   final ShotModel shot;
   final VoidCallback onDelete;
+  final bool isOwner;
 
   const _ShotItem({
     required this.shot,
     required this.onDelete,
+    this.isOwner = false,
   });
 
   @override
@@ -667,10 +862,10 @@ class _ShotItem extends StatefulWidget {
 
 class _ShotItemState extends State<_ShotItem> with SingleTickerProviderStateMixin {
   final _shotService = ShotService();
-  final _reportService = ReportService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   bool _isLiked = false;
   int _likeCount = 0;
+  int _commentCount = 0;
   
   // 더블탭 애니메이션
   bool _showHeart = false;
@@ -686,6 +881,7 @@ class _ShotItemState extends State<_ShotItem> with SingleTickerProviderStateMixi
   void initState() {
     super.initState();
     _likeCount = widget.shot.likeCount;
+    _commentCount = widget.shot.commentCount;
     _checkLiked();
     
     _heartAnimController = AnimationController(
@@ -858,6 +1054,13 @@ class _ShotItemState extends State<_ShotItem> with SingleTickerProviderStateMixi
                   onTap: _toggleLike,
                 ),
                 const SizedBox(height: 20),
+                // 댓글
+                _ActionButton(
+                  icon: Icons.chat_bubble_outline,
+                  label: '$_commentCount',
+                  onTap: () => _showComments(context),
+                ),
+                const SizedBox(height: 20),
                 // 음성 재생 (있을 때만)
                 if (widget.shot.voiceUrl != null) ...[
                   _ActionButton(
@@ -938,6 +1141,24 @@ class _ShotItemState extends State<_ShotItem> with SingleTickerProviderStateMixi
     }
   }
 
+  void _showComments(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _ShotCommentSheet(
+        shot: widget.shot,
+        uid: _uid,
+        onCommentAdded: () {
+          setState(() => _commentCount++);
+        },
+      ),
+    );
+  }
+
   void _showOptions(BuildContext context, bool isAuthor) {
     showModalBottomSheet(
       context: context,
@@ -979,18 +1200,7 @@ class _ShotItemState extends State<_ShotItem> with SingleTickerProviderStateMixi
                     );
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Icons.block, color: Colors.white),
-                  title: const Text(
-                    '이 사용자 차단',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _reportService.blockUser(_uid, widget.shot.authorId);
-                    widget.onDelete();
-                  },
-                ),
+
               ],
               ListTile(
                 leading: const Icon(Icons.close, color: Colors.white),
@@ -1002,6 +1212,312 @@ class _ShotItemState extends State<_ShotItem> with SingleTickerProviderStateMixi
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+// ── Shot 댓글 바텀시트
+class _ShotCommentSheet extends StatefulWidget {
+  final ShotModel shot;
+  final String uid;
+  final VoidCallback onCommentAdded;
+
+  const _ShotCommentSheet({
+    required this.shot,
+    required this.uid,
+    required this.onCommentAdded,
+  });
+
+  @override
+  State<_ShotCommentSheet> createState() => _ShotCommentSheetState();
+}
+
+class _ShotCommentSheetState extends State<_ShotCommentSheet> {
+  final _shotService = ShotService();
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  final _userService = UserService();
+  bool _isSending = false;
+  String _myGender = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMyGender();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMyGender() async {
+    final user = await _userService.getUser(widget.uid);
+    if (mounted && user != null) {
+      setState(() => _myGender = user.gender);
+    }
+  }
+
+  Future<void> _sendComment() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _isSending) return;
+
+    setState(() => _isSending = true);
+    _controller.clear();
+    _focusNode.unfocus();
+
+    try {
+      await _shotService.addShotComment(
+        shotId: widget.shot.id,
+        authorId: widget.uid,
+        authorGender: _myGender,
+        content: text,
+      );
+      widget.onCommentAdded();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('댓글 작성 실패')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  Widget _buildGenderBadge(String gender) {
+    final isMale = gender == 'male';
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        color: isMale ? Colors.blue[400] : Colors.pink[400],
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        isMale ? Icons.male : Icons.female,
+        color: Colors.white,
+        size: 14,
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return '방금 전';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+    if (diff.inHours < 24) return '${diff.inHours}시간 전';
+    return '${diff.inDays}일 전';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // 핸들
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[700],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // 헤더
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  const Text(
+                    '댓글',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white54),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+            // 댓글 목록
+            Expanded(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _shotService.getShotCommentsStream(widget.shot.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+                    );
+                  }
+
+                  final comments = snapshot.data ?? [];
+
+                  if (comments.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey[700]),
+                          const SizedBox(height: 12),
+                          Text(
+                            '첫 댓글을 남겨보세요',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: comments.length,
+                    itemBuilder: (context, index) {
+                      final comment = comments[index];
+                      final isMe = comment['authorId'] == widget.uid;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildGenderBadge(comment['authorGender'] ?? ''),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        comment['authorGender'] == 'male' ? '남성' : '여성',
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        _timeAgo(comment['createdAt'] as DateTime),
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    comment['content'] ?? '',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // 본인 댓글 삭제
+                            if (isMe)
+                              GestureDetector(
+                                onTap: () async {
+                                  await _shotService.deleteShotComment(
+                                    shotId: widget.shot.id,
+                                    commentId: comment['id'],
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Icon(Icons.close, size: 16, color: Colors.grey[600]),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            // 댓글 입력창
+            Container(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.grey[850],
+                border: Border(top: BorderSide(color: Colors.white12)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: '익명으로 댓글 달기...',
+                        hintStyle: TextStyle(color: Colors.grey[600]),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[800],
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                      ),
+                      maxLength: 200,
+                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                      onSubmitted: (_) => _sendComment(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _isSending ? null : _sendComment,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _isSending
+                            ? Colors.grey[700]
+                            : const Color(0xFF6C63FF),
+                      ),
+                      child: _isSending
+                          ? const Padding(
+                              padding: EdgeInsets.all(10),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.send, color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );

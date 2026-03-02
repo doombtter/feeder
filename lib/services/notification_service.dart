@@ -143,20 +143,8 @@ class NotificationService {
     required String senderGender,
     required String messagePreview,
   }) async {
-    // 중복 알림 방지: 최근 1분 내 같은 채팅방 알림이 있으면 스킵
-    final recent = await _firestore
-        .collection('notifications')
-        .where('userId', isEqualTo: toUserId)
-        .where('type', isEqualTo: NotificationType.newMessage.name)
-        .where('targetId', isEqualTo: chatRoomId)
-        .where('createdAt',
-            isGreaterThan: Timestamp.fromDate(
-              DateTime.now().subtract(const Duration(minutes: 1)),
-            ))
-        .get();
-
-    if (recent.docs.isNotEmpty) return;
-
+    // 중복 알림 방지는 Cloud Functions에서 처리
+    // (클라이언트에서 타인의 notifications 컬렉션 조회 시 권한 오류 발생)
     await _createNotification(
       userId: toUserId,
       type: NotificationType.newMessage,
@@ -218,7 +206,34 @@ class NotificationService {
     );
   }
 
-  /// 알림 생성 (내부용)
+  /// 알림 설정 조회 (캐시 없이 항상 최신)
+  Future<Map<String, dynamic>> _getNotificationSettings(String userId) async {
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      final data = doc.data();
+      return (data?['notificationSettings'] as Map<String, dynamic>?) ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// 알림 타입 → 설정 키 매핑
+  String? _settingKeyForType(NotificationType type) {
+    switch (type) {
+      case NotificationType.newMessage:
+      case NotificationType.chatAccepted:
+        return 'message';
+      case NotificationType.newComment:
+      case NotificationType.newReply:
+        return 'comment';
+      case NotificationType.chatRequest:
+        return 'chatRequest';
+      default:
+        return null; // 설정 없는 타입은 항상 발송
+    }
+  }
+
+  /// 알림 생성 (내부용) — 알림 설정 확인 후 발송
   Future<void> _createNotification({
     required String userId,
     required NotificationType type,
@@ -228,6 +243,14 @@ class NotificationService {
     String? senderId,
     String? senderGender,
   }) async {
+    // 알림 설정 확인
+    final settingKey = _settingKeyForType(type);
+    if (settingKey != null) {
+      final settings = await _getNotificationSettings(userId);
+      final isEnabled = settings[settingKey] ?? true;
+      if (!isEnabled) return; // 해당 알림 꺼져있으면 스킵
+    }
+
     await _firestore.collection('notifications').add({
       'userId': userId,
       'type': type.name,

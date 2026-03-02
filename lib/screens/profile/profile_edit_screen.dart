@@ -207,27 +207,34 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         elevation: 0.5,
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _saveProfile,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C63FF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF6C63FF),
+                    ),
+                  )
+                : GestureDetector(
+                    onTap: _saveProfile,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6C63FF),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    )
-                  : const Text('저장'),
-            ),
+                      child: const Text(
+                        '저장',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -335,6 +342,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 hintText: '2~10자 입력',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[200]!),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -343,8 +359,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     width: 2,
                   ),
                 ),
-                filled: !widget.user.canChangeNickname,
-                fillColor: Colors.grey[100],
+                filled: true,
+                fillColor: widget.user.canChangeNickname ? Colors.white : Colors.grey[100],
               ),
             ),
             const SizedBox(height: 16),

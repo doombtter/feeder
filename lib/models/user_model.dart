@@ -18,6 +18,8 @@ class UserModel {
   final bool isOnline;
   final DateTime? lastSeenAt;
   final List<String> blockedUsers;  // 차단한 유저 목록
+  final bool isPremium;
+  final DateTime? premiumExpiresAt;
 
   UserModel({
     required this.uid,
@@ -37,6 +39,8 @@ class UserModel {
     this.isOnline = false,
     this.lastSeenAt,
     this.blockedUsers = const [],
+    this.isPremium = false,
+    this.premiumExpiresAt,
   });
 
   // 나이 계산
@@ -93,6 +97,8 @@ class UserModel {
       isOnline: data['isOnline'] ?? false,
       lastSeenAt: (data['lastSeenAt'] as Timestamp?)?.toDate(),
       blockedUsers: List<String>.from(data['blockedUsers'] ?? []),
+      isPremium: data['isPremium'] ?? false,
+      premiumExpiresAt: (data['premiumExpiresAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -114,6 +120,8 @@ class UserModel {
       'isOnline': isOnline,
       'lastSeenAt': lastSeenAt != null ? Timestamp.fromDate(lastSeenAt!) : null,
       'blockedUsers': blockedUsers,
+      'isPremium': isPremium,
+      'premiumExpiresAt': premiumExpiresAt != null ? Timestamp.fromDate(premiumExpiresAt!) : null,
     };
   }
 

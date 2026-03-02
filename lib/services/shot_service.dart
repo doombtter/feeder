@@ -7,7 +7,7 @@ class ShotService {
   // 활성 Shots 목록 (24시간 이내, 만료되지 않은 것, 조회한 것 제외)
   Future<List<ShotModel>> getUnviewedShots(String userId) async {
     final now = DateTime.now();
-    
+
     // 내가 조회한 shot ID 목록
     final viewedSnapshot = await _firestore
         .collection('users')
@@ -27,12 +27,18 @@ class ShotService {
 
     return shotsSnapshot.docs
         .map((doc) => ShotModel.fromFirestore(doc))
-        .where((shot) => !shot.isExpired && !viewedIds.contains(shot.id))
-        .toList();
+        .where((shot) {
+      if (shot.isExpired) return false;
+      // 내 shots은 항상 제외 (내 shots 탭에서 따로 보여줌)
+      if (shot.authorId == userId) return false;
+      // 이미 본 shots 제외
+      if (viewedIds.contains(shot.id)) return false;
+      return true;
+    }).toList();
   }
 
-  // 활성 Shots 스트림 (조회 여부 관계없이)
-  Stream<List<ShotModel>> getShotsStream() {
+  // 활성 Shots 스트림 (조회 여부 관계없이, 내 shots 제외)
+  Stream<List<ShotModel>> getShotsStream({String? excludeUserId}) {
     final now = DateTime.now();
     return _firestore
         .collection('shots')
@@ -44,8 +50,12 @@ class ShotService {
         .map((snapshot) {
       return snapshot.docs
           .map((doc) => ShotModel.fromFirestore(doc))
-          .where((shot) => !shot.isExpired)
-          .toList();
+          .where((shot) {
+        if (shot.isExpired) return false;
+        if (excludeUserId != null && shot.authorId == excludeUserId)
+          return false;
+        return true;
+      }).toList();
     });
   }
 
@@ -170,6 +180,74 @@ class ShotService {
     for (final doc in expiredShots.docs) {
       batch.update(doc.reference, {'isDeleted': true});
     }
+    await batch.commit();
+  }
+
+  // ── Shot 댓글 ──────────────────────────────────────────────
+
+  // 댓글 스트림
+  Stream<List<Map<String, dynamic>>> getShotCommentsStream(String shotId) {
+    return _firestore
+        .collection('shots')
+        .doc(shotId)
+        .collection('comments')
+        .where('isDeleted', isEqualTo: false)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) {
+              final d = doc.data();
+              return {
+                'id': doc.id,
+                'authorId': d['authorId'] ?? '',
+                'authorGender': d['authorGender'] ?? '',
+                'content': d['content'] ?? '',
+                'createdAt':
+                    (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+              };
+            }).toList());
+  }
+
+  // 댓글 작성
+  Future<void> addShotComment({
+    required String shotId,
+    required String authorId,
+    required String authorGender,
+    required String content,
+  }) async {
+    final batch = _firestore.batch();
+
+    final commentRef =
+        _firestore.collection('shots').doc(shotId).collection('comments').doc();
+
+    batch.set(commentRef, {
+      'authorId': authorId,
+      'authorGender': authorGender,
+      'content': content,
+      'isDeleted': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Shot 문서에 commentCount 증가
+    final shotRef = _firestore.collection('shots').doc(shotId);
+    batch.update(shotRef, {'commentCount': FieldValue.increment(1)});
+
+    await batch.commit();
+  }
+
+  // 댓글 삭제
+  Future<void> deleteShotComment({
+    required String shotId,
+    required String commentId,
+  }) async {
+    final batch = _firestore.batch();
+    final commentRef = _firestore
+        .collection('shots')
+        .doc(shotId)
+        .collection('comments')
+        .doc(commentId);
+    batch.update(commentRef, {'isDeleted': true});
+    final shotRef = _firestore.collection('shots').doc(shotId);
+    batch.update(shotRef, {'commentCount': FieldValue.increment(-1)});
     await batch.commit();
   }
 }

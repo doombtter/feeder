@@ -3,8 +3,62 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'blocked_users_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final _uid = FirebaseAuth.instance.currentUser!.uid;
+  final _firestore = FirebaseFirestore.instance;
+
+  // 알림 설정
+  bool _notifyMessage = true;
+  bool _notifyComment = true;
+  bool _notifyLike = true;
+  bool _notifyChatRequest = true;
+  bool _isLoadingNotif = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationSettings();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final doc = await _firestore.collection('users').doc(_uid).get();
+      final data = doc.data();
+      if (data != null && mounted) {
+        final notif = data['notificationSettings'] as Map<String, dynamic>?;
+        setState(() {
+          _notifyMessage    = notif?['message']     ?? true;
+          _notifyComment    = notif?['comment']     ?? true;
+          _notifyLike       = notif?['like']        ?? true;
+          _notifyChatRequest = notif?['chatRequest'] ?? true;
+          _isLoadingNotif   = false;
+        });
+      }
+    } catch (_) {
+      setState(() => _isLoadingNotif = false);
+    }
+  }
+
+  Future<void> _updateNotificationSetting(String key, bool value) async {
+    try {
+      await _firestore.collection('users').doc(_uid).update({
+        'notificationSettings.$key': value,
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('설정 저장에 실패했습니다')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,8 +73,60 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           const SizedBox(height: 16),
-          
-          // 계정 섹션
+
+          // ── 알림 설정 섹션
+          _buildSectionHeader('알림 설정'),
+          if (_isLoadingNotif)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            _buildSwitchTile(
+              icon: Icons.chat_bubble_outline,
+              title: '메시지 알림',
+              subtitle: '새 채팅 메시지가 오면 알림',
+              value: _notifyMessage,
+              onChanged: (v) {
+                setState(() => _notifyMessage = v);
+                _updateNotificationSetting('message', v);
+              },
+            ),
+            _buildSwitchTile(
+              icon: Icons.comment_outlined,
+              title: '댓글 알림',
+              subtitle: '내 글에 댓글이 달리면 알림',
+              value: _notifyComment,
+              onChanged: (v) {
+                setState(() => _notifyComment = v);
+                _updateNotificationSetting('comment', v);
+              },
+            ),
+            _buildSwitchTile(
+              icon: Icons.favorite_border,
+              title: '좋아요 알림',
+              subtitle: '내 글/댓글에 좋아요가 달리면 알림',
+              value: _notifyLike,
+              onChanged: (v) {
+                setState(() => _notifyLike = v);
+                _updateNotificationSetting('like', v);
+              },
+            ),
+            _buildSwitchTile(
+              icon: Icons.mark_chat_unread_outlined,
+              title: '채팅 신청 알림',
+              subtitle: '새 채팅 신청이 오면 알림',
+              value: _notifyChatRequest,
+              onChanged: (v) {
+                setState(() => _notifyChatRequest = v);
+                _updateNotificationSetting('chatRequest', v);
+              },
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          // ── 계정 섹션
           _buildSectionHeader('계정'),
           _buildListTile(
             icon: Icons.block,
@@ -34,24 +140,20 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
-          
+
           const SizedBox(height: 16),
-          
-          // 앱 정보 섹션
+
+          // ── 앱 정보 섹션
           _buildSectionHeader('앱 정보'),
           _buildListTile(
             icon: Icons.description_outlined,
             title: '이용약관',
-            onTap: () {
-              // TODO: 이용약관 페이지
-            },
+            onTap: () {},
           ),
           _buildListTile(
             icon: Icons.privacy_tip_outlined,
             title: '개인정보처리방침',
-            onTap: () {
-              // TODO: 개인정보처리방침 페이지
-            },
+            onTap: () {},
           ),
           _buildListTile(
             icon: Icons.info_outline,
@@ -61,10 +163,10 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(color: Colors.grey[600]),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
-          // 계정 관리 섹션
+
+          // ── 계정 관리 섹션
           _buildSectionHeader('계정 관리'),
           _buildListTile(
             icon: Icons.logout,
@@ -77,7 +179,7 @@ class SettingsScreen extends StatelessWidget {
             titleColor: Colors.red,
             onTap: () => _showWithdrawDialog(context),
           ),
-          
+
           const SizedBox(height: 32),
         ],
       ),
@@ -86,13 +188,49 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
         title,
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: Colors.grey[600],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      color: Colors.white,
+      child: ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFF6C63FF).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: const Color(0xFF6C63FF), size: 20),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+        ),
+        trailing: Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: const Color(0xFF6C63FF),
         ),
       ),
     );
@@ -109,13 +247,11 @@ class SettingsScreen extends StatelessWidget {
       color: Colors.white,
       child: ListTile(
         leading: Icon(icon, color: titleColor ?? Colors.grey[700]),
-        title: Text(
-          title,
-          style: TextStyle(color: titleColor),
-        ),
-        trailing: trailing ?? (onTap != null
-            ? Icon(Icons.chevron_right, color: Colors.grey[400])
-            : null),
+        title: Text(title, style: TextStyle(color: titleColor)),
+        trailing: trailing ??
+            (onTap != null
+                ? Icon(Icons.chevron_right, color: Colors.grey[400])
+                : null),
         onTap: onTap,
       ),
     );
@@ -166,10 +302,7 @@ class SettingsScreen extends StatelessWidget {
               Navigator.pop(context);
               _showWithdrawConfirmDialog(context);
             },
-            child: const Text(
-              '탈퇴하기',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('탈퇴하기', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -178,7 +311,7 @@ class SettingsScreen extends StatelessWidget {
 
   void _showWithdrawConfirmDialog(BuildContext context) {
     final controller = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -214,10 +347,7 @@ class SettingsScreen extends StatelessWidget {
                 );
               }
             },
-            child: const Text(
-              '탈퇴',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('탈퇴', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -225,7 +355,6 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _processWithdraw(BuildContext context) async {
-    // 로딩 표시
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -239,10 +368,8 @@ class SettingsScreen extends StatelessWidget {
 
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      final firestore = FirebaseFirestore.instance;
 
-      // 1. 유저 문서 삭제 (소프트 삭제)
-      await firestore.collection('users').doc(uid).update({
+      await _firestore.collection('users').doc(uid).update({
         'isDeleted': true,
         'deletedAt': FieldValue.serverTimestamp(),
         'nickname': '탈퇴한 사용자',
@@ -251,8 +378,7 @@ class SettingsScreen extends StatelessWidget {
         'phoneNumber': '',
       });
 
-      // 2. 작성한 글 소프트 삭제
-      final posts = await firestore
+      final posts = await _firestore
           .collection('posts')
           .where('authorId', isEqualTo: uid)
           .get();
@@ -260,8 +386,7 @@ class SettingsScreen extends StatelessWidget {
         await post.reference.update({'isDeleted': true});
       }
 
-      // 3. 작성한 Shots 소프트 삭제
-      final shots = await firestore
+      final shots = await _firestore
           .collection('shots')
           .where('authorId', isEqualTo: uid)
           .get();
@@ -269,8 +394,7 @@ class SettingsScreen extends StatelessWidget {
         await shot.reference.update({'isDeleted': true});
       }
 
-      // 4. 참여 중인 채팅방의 프로필 정보 업데이트
-      final chatRooms = await firestore
+      final chatRooms = await _firestore
           .collection('chatRooms')
           .where('participants', arrayContains: uid)
           .get();
@@ -282,13 +406,10 @@ class SettingsScreen extends StatelessWidget {
         });
       }
 
-      // 5. 로그아웃 처리
       await FirebaseAuth.instance.signOut();
-
-      // 로딩 닫기는 signOut 후 자동으로 AuthWrapper가 처리함
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // 로딩 닫기
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('탈퇴 실패: $e')),
         );

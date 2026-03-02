@@ -32,10 +32,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   bool _isSending = false;
 
-  // 음성 녹음 관련 (flutter_sound)
+  // 음성 녹음 상태
+  // mode: 'input' | 'recording' | 'preview'
+  String _voiceMode = 'input';
+
   final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  final FlutterSoundPlayer _previewPlayer = FlutterSoundPlayer();
   bool _isRecorderInitialized = false;
-  bool _isRecording = false;
+  bool _isPreviewPlaying = false;
   int _recordDuration = 0;
   Timer? _recordTimer;
   String? _recordPath;
@@ -45,6 +49,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.initState();
     _chatService.markAsRead(widget.chatRoomId, _uid);
     _initRecorder();
+    _previewPlayer.openPlayer();
+    // 진입 시 맨 아래로 스크롤
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
   Future<void> _initRecorder() async {
@@ -65,6 +72,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (_isRecorderInitialized) {
       _recorder.closeRecorder();
     }
+    _previewPlayer.closePlayer();
     super.dispose();
   }
 
@@ -81,7 +89,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         senderId: _uid,
         content: content,
       );
-      
+
       if (success) {
         _scrollToBottom();
       } else {
@@ -112,8 +120,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
+  // ── 녹음 시작
   Future<void> _startRecording() async {
-    // 마이크 권한 요청
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
       if (mounted) {
@@ -144,7 +152,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       );
 
       setState(() {
-        _isRecording = true;
+        _voiceMode = 'recording';
         _recordDuration = 0;
       });
 
@@ -162,6 +170,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
+  // ── 녹음 중지 → 프리뷰 모드로
   Future<void> _stopRecording() async {
     _recordTimer?.cancel();
 
@@ -169,26 +178,99 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       await _recorder.stopRecorder();
 
       if (_recordPath == null || _recordDuration < 1) {
-        setState(() => _isRecording = false);
+        setState(() {
+          _voiceMode = 'input';
+          _recordDuration = 0;
+        });
         return;
       }
 
-      setState(() {
-        _isRecording = false;
-        _isSending = true;
-      });
+      setState(() => _voiceMode = 'preview');
+    } catch (e) {
+      setState(() => _voiceMode = 'input');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('녹음 중지 실패: $e')),
+      );
+    }
+  }
 
+  // ── 녹음 취소
+  Future<void> _cancelRecording() async {
+    _recordTimer?.cancel();
+    if (_recorder.isRecording) {
+      await _recorder.stopRecorder();
+    }
+    if (_isPreviewPlaying) {
+      await _previewPlayer.stopPlayer();
+    }
+    if (_recordPath != null) {
+      try { await File(_recordPath!).delete(); } catch (_) {}
+      _recordPath = null;
+    }
+    setState(() {
+      _voiceMode = 'input';
+      _recordDuration = 0;
+      _isPreviewPlaying = false;
+    });
+  }
+
+  // ── 프리뷰 재생/정지
+  Future<void> _togglePreviewPlay() async {
+    if (_recordPath == null) return;
+
+    if (_isPreviewPlaying) {
+      await _previewPlayer.stopPlayer();
+      setState(() => _isPreviewPlaying = false);
+    } else {
+      setState(() => _isPreviewPlaying = true);
+      await _previewPlayer.startPlayer(
+        fromURI: _recordPath,
+        whenFinished: () {
+          if (mounted) setState(() => _isPreviewPlaying = false);
+        },
+      );
+    }
+  }
+
+  // ── 재녹음
+  Future<void> _reRecord() async {
+    if (_isPreviewPlaying) {
+      await _previewPlayer.stopPlayer();
+      setState(() => _isPreviewPlaying = false);
+    }
+    if (_recordPath != null) {
+      try { await File(_recordPath!).delete(); } catch (_) {}
+      _recordPath = null;
+    }
+    setState(() {
+      _recordDuration = 0;
+      _voiceMode = 'input';
+    });
+    await _startRecording();
+  }
+
+  // ── 음성 메시지 전송
+  Future<void> _sendVoiceMessage() async {
+    if (_recordPath == null || _isSending) return;
+
+    if (_isPreviewPlaying) {
+      await _previewPlayer.stopPlayer();
+      setState(() => _isPreviewPlaying = false);
+    }
+
+    setState(() {
+      _voiceMode = 'input';
+      _isSending = true;
+    });
+
+    try {
       final file = File(_recordPath!);
-      
-      // S3에 업로드
       final voiceUrl = await S3Service.uploadVoice(
         file,
         chatRoomId: widget.chatRoomId,
       );
 
-      if (voiceUrl == null) {
-        throw Exception('업로드 실패');
-      }
+      if (voiceUrl == null) throw Exception('업로드 실패');
 
       await _chatService.sendMessage(
         chatRoomId: widget.chatRoomId,
@@ -201,29 +283,17 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
       _scrollToBottom();
       await file.delete();
+      _recordPath = null;
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('음성 메시지 전송 실패: $e')),
       );
     } finally {
-      setState(() => _isSending = false);
+      setState(() {
+        _isSending = false;
+        _recordDuration = 0;
+      });
     }
-  }
-
-  Future<void> _cancelRecording() async {
-    _recordTimer?.cancel();
-    await _recorder.stopRecorder();
-
-    if (_recordPath != null) {
-      try {
-        await File(_recordPath!).delete();
-      } catch (_) {}
-    }
-
-    setState(() {
-      _isRecording = false;
-      _recordDuration = 0;
-    });
   }
 
   String _formatDuration(int seconds) {
@@ -270,15 +340,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ChatRoomModel? chatRoom;
         if (roomSnapshot.hasData) {
           try {
-            chatRoom = roomSnapshot.data!.firstWhere(
-              (room) => room.id == widget.chatRoomId,
-            );
+            chatRoom = roomSnapshot.data!
+                .firstWhere((room) => room.id == widget.chatRoomId);
           } catch (_) {}
         }
 
         final otherProfile = chatRoom?.getOtherProfile(_uid);
         final otherUserId = chatRoom?.participants
-            .firstWhere((id) => id != _uid, orElse: () => '') ?? '';
+                .firstWhere((id) => id != _uid, orElse: () => '') ??
+            '';
 
         return Scaffold(
           backgroundColor: Colors.grey[100],
@@ -289,7 +359,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => UserProfileScreen(userId: otherUserId),
+                      builder: (context) =>
+                          UserProfileScreen(userId: otherUserId),
                     ),
                   );
                 }
@@ -322,14 +393,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       );
                       break;
                     case 'block':
-                      _blockUser(otherUserId, otherProfile?.nickname ?? '사용자');
+                      _blockUser(
+                          otherUserId, otherProfile?.nickname ?? '사용자');
                       break;
                     case 'leave':
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (context) => AlertDialog(
                           title: const Text('채팅방 나가기'),
-                          content: const Text('채팅방을 나가시겠습니까?\n대화 내용이 모두 삭제됩니다.'),
+                          content: const Text(
+                              '채팅방을 나가시겠습니까?\n대화 내용이 모두 삭제됩니다.'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
@@ -337,7 +410,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(context, true),
-                              child: const Text('나가기', style: TextStyle(color: Colors.red)),
+                              child: const Text('나가기',
+                                  style: TextStyle(color: Colors.red)),
                             ),
                           ],
                         ),
@@ -377,7 +451,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       children: [
                         Icon(Icons.exit_to_app, size: 20, color: Colors.red),
                         SizedBox(width: 8),
-                        Text('채팅방 나가기', style: TextStyle(color: Colors.red)),
+                        Text('채팅방 나가기',
+                            style: TextStyle(color: Colors.red)),
                       ],
                     ),
                   ),
@@ -393,7 +468,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+                        child: CircularProgressIndicator(
+                            color: Color(0xFF6C63FF)),
                       );
                     }
 
@@ -401,11 +477,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
                     if (messages.isEmpty) {
                       return const Center(
-                        child: Text('첫 메시지를 보내보세요!', style: TextStyle(color: Colors.grey)),
+                        child: Text('첫 메시지를 보내보세요!',
+                            style: TextStyle(color: Colors.grey)),
                       );
                     }
 
                     _chatService.markAsRead(widget.chatRoomId, _uid);
+                    // 메시지 로드 후 맨 아래로
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
                     return ListView.builder(
                       controller: _scrollController,
@@ -415,16 +494,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         final message = messages[index];
                         final isMe = message.senderId == _uid;
                         final showDate = index == 0 ||
-                            !_isSameDay(messages[index - 1].createdAt, message.createdAt);
+                            !_isSameDay(messages[index - 1].createdAt,
+                                message.createdAt);
 
                         return Column(
                           children: [
                             if (showDate)
                               Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
                                 child: Text(
                                   _formatDate(message.createdAt),
-                                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey[500], fontSize: 12),
                                 ),
                               ),
                             _MessageBubble(message: message, isMe: isMe),
@@ -435,14 +517,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   },
                 ),
               ),
+              // ── 입력창 영역
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border(top: BorderSide(color: Colors.grey[200]!)),
+                  border:
+                      Border(top: BorderSide(color: Colors.grey[200]!)),
                 ),
                 child: SafeArea(
-                  child: _isRecording ? _buildRecordingUI() : _buildInputUI(),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: _buildInputArea(),
+                  ),
                 ),
               ),
             ],
@@ -452,13 +539,37 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  Widget _buildInputUI() {
+  Widget _buildInputArea() {
+    switch (_voiceMode) {
+      case 'recording':
+        return _buildRecordingUI();
+      case 'preview':
+        return _buildPreviewUI();
+      default:
+        return _buildTextInputUI();
+    }
+  }
+
+  // ── 텍스트 입력 UI
+  Widget _buildTextInputUI() {
     return Row(
       children: [
-        IconButton(
-          onPressed: _isSending ? null : _startRecording,
-          icon: const Icon(Icons.mic, color: Color(0xFF6C63FF)),
+        // 마이크 버튼
+        GestureDetector(
+          onTap: _isSending ? null : _startRecording,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[100],
+            ),
+            child: Icon(Icons.mic,
+                color: _isSending ? Colors.grey : const Color(0xFF6C63FF),
+                size: 22),
+          ),
         ),
+        const SizedBox(width: 8),
         Expanded(
           child: TextField(
             controller: _messageController,
@@ -471,58 +582,216 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               ),
               filled: true,
               fillColor: Colors.grey[100],
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
             textInputAction: TextInputAction.send,
             onSubmitted: (_) => _sendMessage(),
           ),
         ),
         const SizedBox(width: 8),
-        IconButton(
-          onPressed: _isSending ? null : _sendMessage,
-          icon: _isSending
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.send, color: Color(0xFF6C63FF)),
+        GestureDetector(
+          onTap: _isSending ? null : _sendMessage,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF6C63FF),
+            ),
+            child: _isSending
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.send, color: Colors.white, size: 20),
+          ),
         ),
       ],
     );
   }
 
+  // ── 녹음 중 UI
   Widget _buildRecordingUI() {
     return Row(
       children: [
-        IconButton(
-          onPressed: _cancelRecording,
-          icon: const Icon(Icons.close, color: Colors.red),
+        // 취소
+        GestureDetector(
+          onTap: _cancelRecording,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle, color: Colors.red[50]),
+            child: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
+          ),
         ),
+        const SizedBox(width: 12),
         Expanded(
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.red),
+              // 깜빡이는 빨간 점
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.3, end: 1.0),
+                duration: const Duration(milliseconds: 600),
+                builder: (context, value, child) => Opacity(
+                  opacity: value,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.red,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               Text(
                 _formatDuration(_recordDuration),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(width: 8),
-              Text('녹음 중...', style: TextStyle(color: Colors.grey[600])),
+              Text('녹음 중',
+                  style:
+                      TextStyle(color: Colors.grey[500], fontSize: 13)),
             ],
           ),
         ),
-        IconButton(
-          onPressed: _stopRecording,
-          icon: const Icon(Icons.send, color: Color(0xFF6C63FF)),
+        // 전송 (녹음 완료 → 프리뷰)
+        GestureDetector(
+          onTap: _stopRecording,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF6C63FF),
+            ),
+            child: const Icon(Icons.stop, color: Colors.white, size: 22),
+          ),
         ),
       ],
+    );
+  }
+
+  // ── 프리뷰 UI (녹음 후 듣고 전송)
+  Widget _buildPreviewUI() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6C63FF).withOpacity(0.06),
+        borderRadius: BorderRadius.circular(24),
+        border:
+            Border.all(color: const Color(0xFF6C63FF).withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          // 취소
+          GestureDetector(
+            onTap: _cancelRecording,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle, color: Colors.red[50]),
+              child:
+                  const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 재생/정지
+          GestureDetector(
+            onTap: _togglePreviewPlay,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF6C63FF),
+              ),
+              child: Icon(
+                _isPreviewPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // 파형 바 + 시간
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 파형 모양 (고정 시각화)
+                Row(
+                  children: List.generate(20, (i) {
+                    final heights = [
+                      6.0, 12.0, 8.0, 16.0, 10.0, 14.0, 6.0, 18.0,
+                      12.0, 8.0, 16.0, 10.0, 14.0, 6.0, 18.0, 10.0,
+                      14.0, 8.0, 12.0, 6.0
+                    ];
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1),
+                        child: Container(
+                          height: heights[i],
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C63FF).withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatDuration(_recordDuration),
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 재녹음
+          GestureDetector(
+            onTap: _reRecord,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle, color: Colors.grey[100]),
+              child: Icon(Icons.refresh,
+                  color: Colors.grey[600], size: 20),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 전송
+          GestureDetector(
+            onTap: _isSending ? null : _sendVoiceMessage,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF6C63FF),
+              ),
+              child: _isSending
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.send, color: Colors.white, size: 18),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -565,6 +834,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 }
 
+// ════════════════════════════════════════════════
+// 메시지 버블
+// ════════════════════════════════════════════════
 class _MessageBubble extends StatefulWidget {
   final MessageModel message;
   final bool isMe;
@@ -579,6 +851,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
   final FlutterSoundPlayer _player = FlutterSoundPlayer();
   bool _isPlayerInitialized = false;
   bool _isPlaying = false;
+  double _progress = 0.0;
+  Timer? _progressTimer;
 
   @override
   void initState() {
@@ -595,6 +869,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
 
   @override
   void dispose() {
+    _progressTimer?.cancel();
     _player.closePlayer();
     super.dispose();
   }
@@ -604,14 +879,39 @@ class _MessageBubbleState extends State<_MessageBubble> {
 
     if (_isPlaying) {
       await _player.stopPlayer();
-      setState(() => _isPlaying = false);
+      _progressTimer?.cancel();
+      setState(() {
+        _isPlaying = false;
+        _progress = 0.0;
+      });
     } else {
       if (widget.message.voiceUrl != null) {
-        setState(() => _isPlaying = true);
+        setState(() {
+          _isPlaying = true;
+          _progress = 0.0;
+        });
+
+        final totalSec = widget.message.voiceDuration ?? 1;
+        int elapsed = 0;
+
+        _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (t) {
+          elapsed++;
+          if (mounted) {
+            setState(() {
+              _progress = (elapsed / 10) / totalSec;
+              if (_progress >= 1.0) _progress = 1.0;
+            });
+          }
+        });
+
         await _player.startPlayer(
           fromURI: widget.message.voiceUrl,
           whenFinished: () {
-            if (mounted) setState(() => _isPlaying = false);
+            _progressTimer?.cancel();
+            if (mounted) setState(() {
+              _isPlaying = false;
+              _progress = 0.0;
+            });
           },
         );
       }
@@ -623,7 +923,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: widget.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            widget.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (widget.isMe) ...[
@@ -674,20 +975,41 @@ class _MessageBubbleState extends State<_MessageBubble> {
   }
 
   Widget _buildVoiceBubble() {
+    final totalSec = widget.message.voiceDuration ?? 0;
+    final isMine = widget.isMe;
+    final bubbleColor =
+        isMine ? const Color(0xFF6C63FF) : Colors.white;
+    final iconColor = isMine ? Colors.white : const Color(0xFF6C63FF);
+    final textColor = isMine ? Colors.white : Colors.black87;
+    final subColor =
+        isMine ? Colors.white.withOpacity(0.7) : Colors.grey[500]!;
+    final waveColor =
+        isMine ? Colors.white.withOpacity(0.5) : const Color(0xFF6C63FF).withOpacity(0.3);
+    final waveActiveColor =
+        isMine ? Colors.white : const Color(0xFF6C63FF);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      width: 220,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: widget.isMe ? const Color(0xFF6C63FF) : Colors.white,
+        color: bubbleColor,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(16),
           topRight: const Radius.circular(16),
-          bottomLeft: Radius.circular(widget.isMe ? 16 : 4),
-          bottomRight: Radius.circular(widget.isMe ? 4 : 16),
+          bottomLeft: Radius.circular(isMine ? 16 : 4),
+          bottomRight: Radius.circular(isMine ? 4 : 16),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
+          // 재생 버튼
           GestureDetector(
             onTap: _playPause,
             child: Container(
@@ -695,37 +1017,105 @@ class _MessageBubbleState extends State<_MessageBubble> {
               height: 36,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: widget.isMe ? Colors.white.withOpacity(0.2) : Colors.grey[200],
+                color: isMine
+                    ? Colors.white.withOpacity(0.2)
+                    : const Color(0xFF6C63FF).withOpacity(0.1),
               ),
               child: Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: widget.isMe ? Colors.white : const Color(0xFF6C63FF),
+                color: iconColor,
                 size: 20,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '음성 메시지',
-                style: TextStyle(
-                  color: widget.isMe ? Colors.white : Colors.black87,
-                  fontSize: 13,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 프로그레스 바 (파형 스타일)
+                Stack(
+                  children: [
+                    // 배경 파형
+                    Row(
+                      children: List.generate(16, (i) {
+                        final heights = [
+                          4.0, 10.0, 6.0, 14.0, 8.0, 12.0,
+                          5.0, 16.0, 10.0, 7.0, 14.0, 9.0,
+                          12.0, 5.0, 10.0, 7.0
+                        ];
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 1),
+                            child: Container(
+                              height: heights[i],
+                              decoration: BoxDecoration(
+                                color: waveColor,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    // 진행된 파형 (클리핑)
+                    ClipRect(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: _progress,
+                        child: Row(
+                          children: List.generate(16, (i) {
+                            final heights = [
+                              4.0, 10.0, 6.0, 14.0, 8.0, 12.0,
+                              5.0, 16.0, 10.0, 7.0, 14.0, 9.0,
+                              12.0, 5.0, 10.0, 7.0
+                            ];
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 1),
+                                child: Container(
+                                  height: heights[i],
+                                  decoration: BoxDecoration(
+                                    color: waveActiveColor,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Text(
-                widget.message.durationText,
-                style: TextStyle(
-                  color: widget.isMe ? Colors.white70 : Colors.grey[600],
-                  fontSize: 11,
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '음성 메시지',
+                      style: TextStyle(
+                          color: textColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      _formatDuration(totalSec),
+                      style: TextStyle(color: subColor, fontSize: 10),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDuration(int seconds) {
+    final min = seconds ~/ 60;
+    final sec = seconds % 60;
+    return '$min:${sec.toString().padLeft(2, '0')}';
   }
 }

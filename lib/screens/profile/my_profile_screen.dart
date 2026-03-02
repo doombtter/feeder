@@ -9,6 +9,7 @@ import 'my_posts_screen.dart';
 import 'warded_posts_screen.dart';
 import 'settings_screen.dart';
 import '../chat/received_requests_screen.dart';
+import '../store/store_screen.dart';
 
 class MyProfileScreen extends StatelessWidget {
   const MyProfileScreen({super.key});
@@ -150,7 +151,12 @@ class MyProfileScreen extends StatelessWidget {
                     ),
                     ElevatedButton(
                       onPressed: () {
-                        // TODO: 포인트 충전 화면
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const StoreScreen(),
+                          ),
+                        );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF6C63FF),
