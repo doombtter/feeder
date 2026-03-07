@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,12 +13,15 @@ import '../../services/user_service.dart';
 import '../../services/report_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/notification_service.dart';
-import 'post_write_screen.dart';
 import 'post_detail_screen.dart';
+import 'post_write_screen.dart';
 import '../profile/my_profile_screen.dart';
 import '../chat/chat_list_screen.dart';
 import '../chat/chat_request_dialog.dart';
 import '../shots/shots_screen.dart';
+import '../../core/widgets/ad_widgets.dart';
+import '../../services/user_service.dart' show UserService;
+import '../../services/admob_service.dart';
 import '../common/report_dialog.dart';
 import '../notification/notifications_screen.dart';
 
@@ -33,12 +37,38 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _lastBackPressed;
   final _chatService = ChatService();
   final _notificationService = NotificationService();
+  final _userService = UserService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
-  
+  bool _isPremium = false;
+  final _interstitialController = InterstitialAdController();
+  // Timer? _adTimer; ← 삭제
+
   // Feed 새로고침용 키
   final GlobalKey<_FeedListState> _feedKey = GlobalKey<_FeedListState>();
   // Shots 새로고침용 키
   final GlobalKey<ShotsScreenState> _shotsKey = GlobalKey<ShotsScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPremiumStatus();
+    _interstitialController.preload();
+    // 5분 타이머 삭제됨 - 탭 전환 시 체크로 변경
+  }
+
+  @override
+  void dispose() {
+    // _adTimer?.cancel(); ← 삭제
+    _interstitialController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPremiumStatus() async {
+    final user = await _userService.getUser(_uid);
+    if (mounted && user != null) {
+      setState(() => _isPremium = user.isPremium);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,9 +76,9 @@ class _HomeScreenState extends State<HomeScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        
+
         final now = DateTime.now();
-        if (_lastBackPressed == null || 
+        if (_lastBackPressed == null ||
             now.difference(_lastBackPressed!) > const Duration(seconds: 2)) {
           _lastBackPressed = now;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -62,7 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: _currentIndex == 1 ? Colors.black : AppColors.background,
+        backgroundColor:
+            _currentIndex == 1 ? Colors.black : AppColors.background,
         appBar: _currentIndex == 1
             ? null
             : AppBar(
@@ -75,7 +106,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.rss_feed, color: Colors.white, size: 18),
+                      child: const Icon(Icons.rss_feed,
+                          color: Colors.white, size: 18),
                     ),
                   ],
                 ),
@@ -95,7 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const NotificationsScreen(),
+                                  builder: (context) =>
+                                      const NotificationsScreen(),
                                 ),
                               );
                             },
@@ -160,13 +193,15 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _chatService.getTotalUnreadCount(_uid),
       builder: (context, snapshot) {
         final unreadCount = snapshot.data ?? 0;
-        
+
         return BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) {
             setState(() {
               _currentIndex = index;
             });
+            // 탭 전환 시 쿨타임(5분) 지났으면 전면 광고
+            _interstitialController.showIfIntervalPassed(isPremium: _isPremium);
           },
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AppColors.primary,
@@ -224,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBody() {
     switch (_currentIndex) {
       case 0:
-        return _FeedList(key: _feedKey);
+        return _FeedList(key: _feedKey, isPremium: _isPremium);
       case 1:
         return ShotsScreen(key: _shotsKey);
       case 2:
@@ -232,13 +267,14 @@ class _HomeScreenState extends State<HomeScreen> {
       case 3:
         return const MyProfileScreen();
       default:
-        return _FeedList(key: _feedKey);
+        return _FeedList(key: _feedKey, isPremium: _isPremium);
     }
   }
 }
 
 class _FeedList extends StatefulWidget {
-  const _FeedList({super.key});
+  final bool isPremium;
+  const _FeedList({super.key, this.isPremium = false});
 
   @override
   State<_FeedList> createState() => _FeedListState();
@@ -375,20 +411,31 @@ class _FeedListState extends State<_FeedList> {
             );
           }
 
-          return _PostCard(
-            post: _posts[index],
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => PostDetailScreen(post: _posts[index]),
-                ),
-              );
-              refresh();
-            },
-            onDeleted: () {
-              refresh();
-            },
+          // 5번째 게시글 다음마다 네이티브 광고 (프리미엄 제외)
+          final showAdAfter = !widget.isPremium &&
+              (index + 1) % 5 == 0 &&
+              index + 1 < _posts.length;
+
+          return Column(
+            children: [
+              _PostCard(
+                post: _posts[index],
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          PostDetailScreen(post: _posts[index]),
+                    ),
+                  );
+                  refresh();
+                },
+                onDeleted: () {
+                  refresh();
+                },
+              ),
+              if (showAdAfter) const NativeAdWidget(),
+            ],
           );
         },
       ),
@@ -660,7 +707,6 @@ class _PostCardState extends State<_PostCard> {
                     );
                   },
                 ),
-
               ],
               ListTile(
                 leading: const Icon(Icons.close),

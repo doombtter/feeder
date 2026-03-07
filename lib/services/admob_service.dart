@@ -71,6 +71,11 @@ class AdMobService {
   // ── 초기화 ───────────────────────────────────────────────────
   static Future<void> initialize() async {
     await MobileAds.instance.initialize();
+    MobileAds.instance.updateRequestConfiguration(
+      RequestConfiguration(
+        testDeviceIds: ['8362D77ED6E3D0D8019ECCABB77D0CAD'],
+      ),
+    );
     debugPrint('AdMob 초기화 완료 [${_useTestAds ? "테스트 모드" : "프로덕션 모드"}]');
   }
 
