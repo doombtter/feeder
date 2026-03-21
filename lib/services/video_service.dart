@@ -8,12 +8,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/video_quota_model.dart';
+import '../core/widgets/membership_widgets.dart';
 
 /// Cloudflare R2 동영상 서비스
 /// 
 /// 기능:
 /// - Cloudflare R2에 동영상 업로드 (S3 호환 API)
-/// - 프리미엄/일반 유저 쿼터 관리
+/// - 프리미엄/MAX/일반 유저 쿼터 관리
 /// - 채팅방별 동영상 권한 부여
 class VideoService {
   static final VideoService _instance = VideoService._internal();
@@ -152,7 +153,7 @@ class VideoService {
   /// 
   /// [chatRoomId] 채팅방 ID
   /// [otherUserId] 상대방 ID
-  /// [isOtherPremium] 상대방 프리미엄 여부
+  /// [isOtherPremium] 상대방 프리미엄/MAX 여부
   Future<VideoPermissionResult> checkVideoPermission({
     required String chatRoomId,
     required String otherUserId,
@@ -161,20 +162,20 @@ class VideoService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return VideoPermissionResult.noPermission();
 
-    // 내 프리미엄 여부 확인
+    // 내 멤버십 등급 확인
     final myDoc = await _firestore.collection('users').doc(uid).get();
-    final isPremium = myDoc.data()?['isPremium'] ?? false;
+    final tier = parseMembershipTier(myDoc.data());
 
-    if (isPremium) {
-      // 프리미엄 유저: 자체 쿼터 확인
-      final quota = await _getOrCreatePremiumQuota(uid);
+    if (tier != MembershipTier.free) {
+      // 프리미엄/MAX 유저: 자체 쿼터 확인
+      final quota = await _getOrCreatePremiumQuota(uid, tier);
       if (quota.canSendVideo) {
         return VideoPermissionResult.premium(quota.remainingToday);
       } else {
         return VideoPermissionResult.quotaExceeded();
       }
     } else {
-      // 일반 유저: 상대가 프리미엄인지 확인
+      // 일반 유저: 상대가 프리미엄/MAX인지 확인
       if (!isOtherPremium) {
         return VideoPermissionResult.noPermission();
       }
@@ -204,11 +205,11 @@ class VideoService {
 
     try {
       final myDoc = await _firestore.collection('users').doc(uid).get();
-      final isPremium = myDoc.data()?['isPremium'] ?? false;
+      final tier = parseMembershipTier(myDoc.data());
 
-      if (isPremium) {
-        // 프리미엄 쿼터 차감
-        final quota = await _getOrCreatePremiumQuota(uid);
+      if (tier != MembershipTier.free) {
+        // 프리미엄/MAX 쿼터 차감
+        final quota = await _getOrCreatePremiumQuota(uid, tier);
         final updated = quota.useOne();
         await _firestore
             .collection('videoQuotas')
@@ -238,14 +239,31 @@ class VideoService {
     }
   }
 
-  /// 프리미엄 유저 쿼터 조회/생성
-  Future<VideoQuotaModel> _getOrCreatePremiumQuota(String userId) async {
+  /// 프리미엄/MAX 유저 쿼터 조회/생성
+  Future<VideoQuotaModel> _getOrCreatePremiumQuota(String userId, MembershipTier tier) async {
     final doc = await _firestore.collection('videoQuotas').doc(userId).get();
     
     if (doc.exists) {
-      return VideoQuotaModel.fromFirestore(doc);
+      var quota = VideoQuotaModel.fromFirestore(doc);
+      // 등급에 따른 일일 한도 업데이트
+      final dailyLimit = MembershipBenefits.getDailyVideoLimit(tier);
+      if (quota.dailyLimit != dailyLimit) {
+        quota = VideoQuotaModel(
+          userId: quota.userId,
+          dailyLimit: dailyLimit,
+          usedToday: quota.usedToday,
+          resetAt: quota.resetAt,
+        );
+      }
+      return quota;
     } else {
-      final quota = VideoQuotaModel.initial(userId);
+      final dailyLimit = MembershipBenefits.getDailyVideoLimit(tier);
+      final quota = VideoQuotaModel(
+        userId: userId,
+        dailyLimit: dailyLimit,
+        usedToday: 0,
+        resetAt: DateTime.now(),
+      );
       await _firestore
           .collection('videoQuotas')
           .doc(userId)

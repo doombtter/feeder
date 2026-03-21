@@ -20,13 +20,13 @@ class VideoQuotaConstants {
 
 /// 유저별 동영상 쿼터 (프리미엄 유저용)
 class VideoQuotaModel {
-  final String oderId;
+  final String userId;
   final int dailyLimit;
   final int usedToday;
   final DateTime resetAt;
 
   VideoQuotaModel({
-    required this.oderId,
+    required this.userId,
     required this.dailyLimit,
     required this.usedToday,
     required this.resetAt,
@@ -52,7 +52,7 @@ class VideoQuotaModel {
   factory VideoQuotaModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return VideoQuotaModel(
-      oderId: doc.id,
+      userId: doc.id,
       dailyLimit: data['dailyLimit'] ?? VideoQuotaConstants.premiumDailyLimit,
       usedToday: data['usedToday'] ?? 0,
       resetAt: (data['resetAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -68,9 +68,9 @@ class VideoQuotaModel {
   }
 
   /// 초기 쿼터 생성 (프리미엄 유저용)
-  factory VideoQuotaModel.initial(String oderId) {
+  factory VideoQuotaModel.initial(String userId) {
     return VideoQuotaModel(
-      oderId: oderId,
+      userId: userId,
       dailyLimit: VideoQuotaConstants.premiumDailyLimit,
       usedToday: 0,
       resetAt: DateTime.now(),
@@ -81,14 +81,14 @@ class VideoQuotaModel {
   VideoQuotaModel useOne() {
     if (_shouldReset) {
       return VideoQuotaModel(
-        oderId: oderId,
+        userId: userId,
         dailyLimit: dailyLimit,
         usedToday: 1,
         resetAt: DateTime.now(),
       );
     }
     return VideoQuotaModel(
-      oderId: oderId,
+      userId: userId,
       dailyLimit: dailyLimit,
       usedToday: usedToday + 1,
       resetAt: resetAt,

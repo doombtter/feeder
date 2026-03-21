@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../core/widgets/membership_widgets.dart';
 
 /// 상품 ID (Google Play Console / App Store Connect에서 설정)
 class ProductIds {
@@ -17,6 +18,10 @@ class ProductIds {
   static const String premiumMonthly = 'premium_monthly';
   static const String premiumYearly = 'premium_yearly';
 
+  // MAX 구독 (월정액)
+  static const String maxMonthly = 'max_monthly';
+  static const String maxYearly = 'max_yearly';
+
   static const List<String> consumables = [
     points100,
     points300,
@@ -27,6 +32,8 @@ class ProductIds {
   static const List<String> subscriptions = [
     premiumMonthly,
     premiumYearly,
+    maxMonthly,
+    maxYearly,
   ];
 
   static const List<String> all = [
@@ -40,8 +47,10 @@ class ProductIds {
     points300: '₩3,300',
     points500: '₩5,500',
     points1000: '₩11,000',
-    premiumMonthly: '₩7,900',   // 동영상 기능 추가로 인상
-    premiumYearly: '₩69,000',   // 약 2개월 무료
+    premiumMonthly: '₩7,900',
+    premiumYearly: '₩69,000',
+    maxMonthly: '₩14,900',
+    maxYearly: '₩129,000',
   };
 }
 
@@ -223,15 +232,24 @@ class PurchaseService {
         await _updatePurchaseStatus(purchase.purchaseID!, 'completed');
       }
     } else if (ProductIds.subscriptions.contains(productId)) {
-      // 프리미엄 구독 활성화
-      final expiresAt = productId == ProductIds.premiumYearly
+      // 구독 활성화 (프리미엄 또는 MAX)
+      final isYearly = productId == ProductIds.premiumYearly || 
+                       productId == ProductIds.maxYearly;
+      final isMax = productId == ProductIds.maxMonthly || 
+                    productId == ProductIds.maxYearly;
+      
+      final expiresAt = isYearly
           ? DateTime.now().add(const Duration(days: 365))
           : DateTime.now().add(const Duration(days: 30));
 
+      final tier = isMax ? MembershipTier.max : MembershipTier.premium;
+
       await _firestore.collection('users').doc(uid).update({
         'isPremium': true,
+        'isMax': isMax,
         'premiumExpiresAt': Timestamp.fromDate(expiresAt),
         'subscriptionProductId': productId,
+        'dailyFreeChats': MembershipBenefits.getDailyFreeChats(tier),
       });
 
       await _updatePurchaseStatus(purchase.purchaseID!, 'completed');
@@ -259,29 +277,37 @@ class PurchaseService {
     await _iap.restorePurchases();
   }
 
-  /// 프리미엄 상태 확인
-  Future<bool> checkPremiumStatus() async {
+  /// 멤버십 등급 확인
+  Future<MembershipTier> checkMembershipTier() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return false;
+    if (uid == null) return MembershipTier.free;
 
     final doc = await _firestore.collection('users').doc(uid).get();
-    if (!doc.exists) return false;
+    if (!doc.exists) return MembershipTier.free;
 
     final data = doc.data()!;
     final isPremium = data['isPremium'] ?? false;
+    final isMax = data['isMax'] ?? false;
     final expiresAt = (data['premiumExpiresAt'] as Timestamp?)?.toDate();
 
-    if (!isPremium || expiresAt == null) return false;
+    if (!isPremium || expiresAt == null) return MembershipTier.free;
 
     // 만료 확인
     if (expiresAt.isBefore(DateTime.now())) {
       await _firestore.collection('users').doc(uid).update({
         'isPremium': false,
+        'isMax': false,
       });
-      return false;
+      return MembershipTier.free;
     }
 
-    return true;
+    return isMax ? MembershipTier.max : MembershipTier.premium;
+  }
+
+  /// 프리미엄 상태 확인 (하위 호환)
+  Future<bool> checkPremiumStatus() async {
+    final tier = await checkMembershipTier();
+    return tier != MembershipTier.free;
   }
 
   /// 상품 가격 가져오기 (스토어 연결 안 됐으면 폴백 가격 반환)

@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/common_widgets.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../../models/post_model.dart';
 import '../../models/report_model.dart';
 import '../../models/user_model.dart';
@@ -26,6 +27,7 @@ import '../../services/admob_service.dart';
 import '../common/report_dialog.dart';
 import '../notification/notifications_screen.dart';
 import '../discover/recent_users_screen.dart';
+import '../store/store_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,7 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final _notificationService = NotificationService();
   final _userService = UserService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
-  bool _isPremium = false;
+  MembershipTier _membershipTier = MembershipTier.free;
+  bool get _isPremium => _membershipTier != MembershipTier.free;
   bool _isSuspended = false;
   DateTime? _suspensionExpiresAt;
   final _interstitialController = InterstitialAdController();
@@ -72,7 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
     
     if (mounted && user != null) {
       setState(() {
-        _isPremium = user.isPremium;
+        _membershipTier = user.isMax 
+            ? MembershipTier.max 
+            : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
         _isSuspended = user.isSuspended;
         _suspensionExpiresAt = user.suspensionExpiresAt;
       });
@@ -138,6 +143,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 elevation: 0,
                 scrolledUnderElevation: 0,
                 actions: [
+                  // 멤버십 아이콘
+                  MembershipIcon(
+                    tier: _membershipTier,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const StoreScreen()),
+                      ).then((_) => _loadUserStatus());
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   // 최근 접속자 버튼
                   Container(
                     margin: const EdgeInsets.only(right: 8),

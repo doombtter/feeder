@@ -19,6 +19,7 @@ class UserModel {
   final DateTime? lastSeenAt;
   final List<String> blockedUsers;  // 차단한 유저 목록
   final bool isPremium;
+  final bool isMax;  // MAX 멤버십
   final DateTime? premiumExpiresAt;
   // 정지 관련
   final bool isSuspended;
@@ -30,6 +31,10 @@ class UserModel {
   // 보상 수령 여부
   final bool hasClaimedRatingReward;  // 앱 평점 보상 수령 여부
   final bool hasClaimedPolicyReward;  // 앱 정책 확인 보상 수령 여부
+  // MAX 전용
+  final bool showMaxBadge;  // MAX 뱃지 표시 여부
+  final int dailyProfileViewCount;  // 오늘 사용한 프로필 조회 횟수
+  final DateTime? dailyProfileViewResetAt;
 
   UserModel({
     required this.uid,
@@ -50,6 +55,7 @@ class UserModel {
     this.lastSeenAt,
     this.blockedUsers = const [],
     this.isPremium = false,
+    this.isMax = false,
     this.premiumExpiresAt,
     this.isSuspended = false,
     this.suspensionExpiresAt,
@@ -58,6 +64,9 @@ class UserModel {
     this.dailyFreeChatsResetAt,
     this.hasClaimedRatingReward = false,
     this.hasClaimedPolicyReward = false,
+    this.showMaxBadge = true,
+    this.dailyProfileViewCount = 0,
+    this.dailyProfileViewResetAt,
   });
 
   // 나이 계산
@@ -93,9 +102,11 @@ class UserModel {
     final resetDate = DateTime(dailyFreeChatsResetAt!.year, dailyFreeChatsResetAt!.month, dailyFreeChatsResetAt!.day);
     final today = DateTime(now.year, now.month, now.day);
     
-    // 날짜가 바뀌었으면 리셋 (프리미엄은 2회, 일반은 1회)
+    // 날짜가 바뀌었으면 리셋 (MAX 3회, 프리미엄 2회, 일반 1회)
     if (today.isAfter(resetDate)) {
-      return isPremium ? 2 : 1;
+      if (isMax) return 3;
+      if (isPremium) return 2;
+      return 1;
     }
     return dailyFreeChats;
   }
@@ -130,6 +141,7 @@ class UserModel {
       lastSeenAt: (data['lastSeenAt'] as Timestamp?)?.toDate(),
       blockedUsers: List<String>.from(data['blockedUsers'] ?? []),
       isPremium: data['isPremium'] ?? false,
+      isMax: data['isMax'] ?? false,
       premiumExpiresAt: (data['premiumExpiresAt'] as Timestamp?)?.toDate(),
       isSuspended: data['isSuspended'] ?? false,
       suspensionExpiresAt: (data['suspensionExpiresAt'] as Timestamp?)?.toDate(),
@@ -138,6 +150,9 @@ class UserModel {
       dailyFreeChatsResetAt: (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate(),
       hasClaimedRatingReward: data['hasClaimedRatingReward'] ?? false,
       hasClaimedPolicyReward: data['hasClaimedPolicyReward'] ?? false,
+      showMaxBadge: data['showMaxBadge'] ?? true,
+      dailyProfileViewCount: data['dailyProfileViewCount'] ?? 0,
+      dailyProfileViewResetAt: (data['dailyProfileViewResetAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -160,6 +175,7 @@ class UserModel {
       'lastSeenAt': lastSeenAt != null ? Timestamp.fromDate(lastSeenAt!) : null,
       'blockedUsers': blockedUsers,
       'isPremium': isPremium,
+      'isMax': isMax,
       'premiumExpiresAt': premiumExpiresAt != null ? Timestamp.fromDate(premiumExpiresAt!) : null,
       'isSuspended': isSuspended,
       'suspensionExpiresAt': suspensionExpiresAt != null ? Timestamp.fromDate(suspensionExpiresAt!) : null,
@@ -168,6 +184,9 @@ class UserModel {
       'dailyFreeChatsResetAt': dailyFreeChatsResetAt != null ? Timestamp.fromDate(dailyFreeChatsResetAt!) : null,
       'hasClaimedRatingReward': hasClaimedRatingReward,
       'hasClaimedPolicyReward': hasClaimedPolicyReward,
+      'showMaxBadge': showMaxBadge,
+      'dailyProfileViewCount': dailyProfileViewCount,
+      'dailyProfileViewResetAt': dailyProfileViewResetAt != null ? Timestamp.fromDate(dailyProfileViewResetAt!) : null,
     };
   }
 

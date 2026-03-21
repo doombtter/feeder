@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../services/suspension_service.dart';
 import 'blocked_users_screen.dart';
+import 'dev_menu_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -17,6 +18,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   final _firestore = FirebaseFirestore.instance;
   final _suspensionService = SuspensionService();
+
+  int _versionTapCount = 0;
+  DateTime? _lastVersionTap;
+  void _onVersionTap() {
+    final now = DateTime.now();
+
+    // 2초 내에 탭해야 카운트
+    if (_lastVersionTap != null &&
+        now.difference(_lastVersionTap!) > const Duration(seconds: 2)) {
+      _versionTapCount = 0;
+    }
+
+    _lastVersionTap = now;
+    _versionTapCount++;
+
+    if (_versionTapCount >= 7) {
+      _versionTapCount = 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const DevMenuScreen()),
+      );
+    } else if (_versionTapCount >= 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${7 - _versionTapCount}번 더 탭하면 개발자 메뉴가 열립니다'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
 
   // URL 상수
   static const _termsUrl = 'https://feeder-dc220.web.app/terms.html';
@@ -94,7 +125,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const NotificationSettingsScreen()),
+                    MaterialPageRoute(
+                        builder: (context) =>
+                            const NotificationSettingsScreen()),
                   );
                 },
               ),
@@ -113,7 +146,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const BlockedUsersScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const BlockedUsersScreen()),
                   );
                 },
               ),
@@ -148,7 +182,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const AppPolicyScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const AppPolicyScreen()),
                   );
                 },
               ),
@@ -165,10 +200,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _launchUrl(_privacyUrl),
               ),
               _buildDivider(),
-              _buildInfoItem(
-                icon: Icons.info_outline_rounded,
-                title: '앱 버전',
-                value: '1.0.0',
+              GestureDetector(
+                onTap: _onVersionTap,
+                child: _buildInfoItem(
+                  icon: Icons.info_outline_rounded,
+                  title: '앱 버전',
+                  value: '1.0.0',
+                ),
               ),
             ],
           ),
@@ -254,7 +292,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: (titleColor ?? AppColors.primary).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: titleColor ?? AppColors.primary, size: 18),
+              child:
+                  Icon(icon, color: titleColor ?? AppColors.primary, size: 18),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -340,7 +379,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('로그아웃', style: TextStyle(color: AppColors.textPrimary)),
+        title:
+            const Text('로그아웃', style: TextStyle(color: AppColors.textPrimary)),
         content: const Text(
           '정말 로그아웃 하시겠습니까?',
           style: TextStyle(color: AppColors.textSecondary),
@@ -348,14 +388,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text('취소',
+                style: TextStyle(color: AppColors.textTertiary)),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               await FirebaseAuth.instance.signOut();
             },
-            child: const Text('로그아웃', style: TextStyle(color: AppColors.primary)),
+            child:
+                const Text('로그아웃', style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
@@ -368,7 +410,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('회원 탈퇴', style: TextStyle(color: AppColors.textPrimary)),
+        title:
+            const Text('회원 탈퇴', style: TextStyle(color: AppColors.textPrimary)),
         content: const Text(
           '정말 탈퇴하시겠습니까?\n\n'
           '• 모든 데이터가 삭제됩니다\n'
@@ -381,7 +424,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text('취소',
+                style: TextStyle(color: AppColors.textTertiary)),
           ),
           TextButton(
             onPressed: () {
@@ -403,7 +447,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('최종 확인', style: TextStyle(color: AppColors.textPrimary)),
+        title:
+            const Text('최종 확인', style: TextStyle(color: AppColors.textPrimary)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +485,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text('취소',
+                style: TextStyle(color: AppColors.textTertiary)),
           ),
           TextButton(
             onPressed: () async {
@@ -474,7 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
-      
+
       final userDoc = await _firestore.collection('users').doc(uid).get();
       final phoneNumber = userDoc.data()?['phoneNumber'] ?? '';
 
@@ -539,10 +585,12 @@ class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
 
   @override
-  State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
+  State<NotificationSettingsScreen> createState() =>
+      _NotificationSettingsScreenState();
 }
 
-class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
+class _NotificationSettingsScreenState
+    extends State<NotificationSettingsScreen> {
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   final _firestore = FirebaseFirestore.instance;
 
@@ -615,7 +663,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -623,7 +672,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                    border:
+                        Border.all(color: AppColors.border.withOpacity(0.5)),
                   ),
                   child: Column(
                     children: [
@@ -921,34 +971,36 @@ class AppPolicyScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-              children: items.map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(top: 6),
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.textTertiary,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        item,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                          height: 1.5,
+              children: items
+                  .map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(top: 6),
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: AppColors.textTertiary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                item,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.textSecondary,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              )).toList(),
+                      ))
+                  .toList(),
             ),
           ),
         ],

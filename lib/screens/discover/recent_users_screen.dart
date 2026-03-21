@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 import '../chat/chat_request_dialog.dart';
 import '../profile/user_profile_screen.dart';
+import '../store/store_screen.dart';
 
 class RecentUsersScreen extends StatefulWidget {
   const RecentUsersScreen({super.key});
@@ -27,6 +29,7 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
   
   String? _genderFilter; // null: 전체, 'male', 'female'
   UserModel? _currentUser;
+  MembershipTier _membershipTier = MembershipTier.free;
 
   @override
   void initState() {
@@ -49,7 +52,14 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   Future<void> _loadCurrentUser() async {
     final user = await _userService.getUser(_uid);
-    if (mounted) setState(() => _currentUser = user);
+    if (mounted && user != null) {
+      setState(() {
+        _currentUser = user;
+        _membershipTier = user.isPremium 
+            ? (user.isMax ? MembershipTier.max : MembershipTier.premium)
+            : MembershipTier.free;
+      });
+    }
   }
 
   Future<void> _loadOnlineUsers() async {
@@ -85,9 +95,51 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
   }
 
   void _setGenderFilter(String? gender) {
+    // 프리미엄/MAX만 성별 필터 사용 가능
+    if (gender != null && !MembershipBenefits.hasGenderFilter(_membershipTier)) {
+      _showPremiumRequiredDialog();
+      return;
+    }
     setState(() => _genderFilter = gender);
     _loadOnlineUsers();
     _loadRecentUsers();
+  }
+
+  void _showPremiumRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.diamond_rounded, color: MembershipTier.premium.color),
+            const SizedBox(width: 8),
+            const Text('프리미엄 전용', style: TextStyle(color: AppColors.textPrimary)),
+          ],
+        ),
+        content: const Text(
+          '성별 필터는 프리미엄 회원만 사용할 수 있어요.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('닫기', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const StoreScreen()),
+              );
+            },
+            child: Text('구독하기', style: TextStyle(color: MembershipTier.premium.color)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _refresh() async {
@@ -190,6 +242,10 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   Widget _buildFilterChip(String label, String? value) {
     final isSelected = _genderFilter == value;
+    final isPremiumFilter = value != null;
+    final canUseFilter = MembershipBenefits.hasGenderFilter(_membershipTier);
+    final isLocked = isPremiumFilter && !canUseFilter;
+    
     Color chipColor = AppColors.card;
     Color textColor = AppColors.textSecondary;
     
@@ -217,13 +273,26 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
             color: isSelected ? textColor.withOpacity(0.5) : AppColors.border,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: textColor,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            fontSize: 13,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isLocked ? AppColors.textTertiary : textColor,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 13,
+              ),
+            ),
+            if (isLocked) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.lock_rounded,
+                size: 12,
+                color: AppColors.textTertiary,
+              ),
+            ],
+          ],
         ),
       ),
     );

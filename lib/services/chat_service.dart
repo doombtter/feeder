@@ -3,6 +3,7 @@ import '../models/chat_request_model.dart';
 import '../models/chat_room_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
+import '../core/widgets/membership_widgets.dart';
 import 'notification_service.dart';
 
 class ChatService {
@@ -19,11 +20,12 @@ class ChatService {
     final data = userDoc.data();
     if (data == null) return 1;
 
-    final isPremium = data['isPremium'] ?? false;
-    final dailyFreeChats = data['dailyFreeChats'] ?? 1;
+    final tier = parseMembershipTier(data);
+    final maxFreeChats = MembershipBenefits.getDailyFreeChats(tier);
+    final dailyFreeChats = data['dailyFreeChats'] ?? maxFreeChats;
     final resetAt = (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate();
 
-    if (resetAt == null) return isPremium ? 2 : 1;
+    if (resetAt == null) return maxFreeChats;
 
     final now = DateTime.now();
     final resetDate = DateTime(resetAt.year, resetAt.month, resetAt.day);
@@ -31,12 +33,11 @@ class ChatService {
 
     // 날짜가 바뀌었으면 리셋
     if (today.isAfter(resetDate)) {
-      final newCount = isPremium ? 2 : 1;
       await _firestore.collection('users').doc(userId).update({
-        'dailyFreeChats': newCount,
+        'dailyFreeChats': maxFreeChats,
         'dailyFreeChatsResetAt': Timestamp.fromDate(now),
       });
-      return newCount;
+      return maxFreeChats;
     }
 
     return dailyFreeChats;
