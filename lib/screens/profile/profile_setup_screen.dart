@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import '../../core/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -24,7 +25,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   File? _profileImage;
   bool _isLoading = false;
 
-  // 년도 리스트 (14세 이상만)
   late final List<int> _birthYears;
   
   final List<String> _regions = [
@@ -51,7 +51,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   void initState() {
     super.initState();
     final currentYear = DateTime.now().year;
-    // 14세 ~ 80세 (1944년 ~ 2010년생)
     _birthYears = List.generate(
       currentYear - 1944 - 13,
       (index) => currentYear - 14 - index,
@@ -85,7 +84,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     final nickname = _nicknameController.text.trim();
     final bio = _bioController.text.trim();
 
-    // 유효성 검사
     if (nickname.isEmpty) {
       _showError('닉네임을 입력해주세요');
       return;
@@ -113,7 +111,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       final uid = _authService.currentUser!.uid;
       String? profileImageUrl;
 
-      // S3에 프로필 이미지 업로드
       if (_profileImage != null) {
         profileImageUrl = await S3Service.uploadProfileImage(
           _profileImage!,
@@ -131,11 +128,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         profileImageUrl: profileImageUrl,
       );
 
-      // 온라인 상태 설정
       await _userService.setOnlineStatus(uid, true);
 
+      // ProfileCheckWrapper의 StreamBuilder가 자동으로 감지하므로
+      // 별도의 네비게이션 필요 없음
       if (mounted) {
-        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('프로필이 저장되었습니다')),
+        );
       }
     } catch (e) {
       _showError('프로필 저장 실패: $e');
@@ -148,19 +148,23 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('프로필 설정'),
-        backgroundColor: const Color(0xFF6C63FF),
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
       ),
       body: SingleChildScrollView(
@@ -174,17 +178,25 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 onTap: _pickImage,
                 child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: Colors.grey[200],
-                      backgroundImage: _profileImage != null
-                          ? FileImage(_profileImage!)
-                          : null,
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.card,
+                        border: Border.all(color: AppColors.border, width: 2),
+                        image: _profileImage != null
+                            ? DecorationImage(
+                                image: FileImage(_profileImage!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
                       child: _profileImage == null
                           ? const Icon(
-                              Icons.person,
+                              Icons.person_rounded,
                               size: 60,
-                              color: Colors.grey,
+                              color: AppColors.textTertiary,
                             )
                           : null,
                     ),
@@ -193,14 +205,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF6C63FF),
+                        decoration: BoxDecoration(
+                          gradient: AppColors.primaryGradient,
                           shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.background, width: 3),
                         ),
                         child: const Icon(
-                          Icons.camera_alt,
-                          size: 20,
+                          Icons.camera_alt_rounded,
                           color: Colors.white,
+                          size: 20,
                         ),
                       ),
                     ),
@@ -208,250 +221,263 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                '프로필 사진 (선택)',
+                style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+              ),
+            ),
             const SizedBox(height: 32),
 
             // 닉네임
-            const Text(
-              '닉네임 *',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            _buildSectionTitle('닉네임', required: true),
             const SizedBox(height: 8),
-            TextField(
+            _buildTextField(
               controller: _nicknameController,
+              hintText: '2~10자 사이로 입력',
               maxLength: 10,
-              decoration: InputDecoration(
-                hintText: '2~10자 입력',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
-              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 자기소개
-            const Text(
-              '자기소개',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            _buildSectionTitle('자기소개'),
             const SizedBox(height: 8),
-            TextField(
+            _buildTextField(
               controller: _bioController,
-              maxLength: 100,
+              hintText: '간단한 자기소개 (선택)',
               maxLines: 3,
-              decoration: InputDecoration(
-                hintText: '간단한 자기소개를 입력해주세요',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
-              ),
+              maxLength: 100,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 출생년도
-            const Text(
-              '출생년도 *',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            _buildSectionTitle('출생년도', required: true),
             const SizedBox(height: 8),
-            DropdownButtonFormField<int>(
+            _buildDropdown<int>(
               value: _selectedBirthYear,
-              decoration: InputDecoration(
-                hintText: '출생년도 선택',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
-              ),
+              hint: '출생년도 선택',
               items: _birthYears.map((year) {
-                final age = DateTime.now().year - year;
                 return DropdownMenuItem(
                   value: year,
-                  child: Text('$year년 (만 $age세)'),
+                  child: Text('$year년'),
                 );
               }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedBirthYear = value;
-                });
-              },
+              onChanged: (value) => setState(() => _selectedBirthYear = value),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 성별
-            const Text(
-              '성별 *',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            _buildSectionTitle('성별', required: true),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedGender = 'male';
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: _selectedGender == 'male'
-                            ? const Color(0xFF6C63FF)
-                            : Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _selectedGender == 'male'
-                              ? const Color(0xFF6C63FF)
-                              : Colors.grey[300]!,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '남자',
-                          style: TextStyle(
-                            color: _selectedGender == 'male'
-                                ? Colors.white
-                                : Colors.black87,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
+                  child: _buildGenderButton(
+                    label: '남성',
+                    value: 'male',
+                    icon: Icons.male_rounded,
+                    color: AppColors.male,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedGender = 'female';
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: _selectedGender == 'female'
-                            ? const Color(0xFF6C63FF)
-                            : Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _selectedGender == 'female'
-                              ? const Color(0xFF6C63FF)
-                              : Colors.grey[300]!,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '여자',
-                          style: TextStyle(
-                            color: _selectedGender == 'female'
-                                ? Colors.white
-                                : Colors.black87,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
+                  child: _buildGenderButton(
+                    label: '여성',
+                    value: 'female',
+                    icon: Icons.female_rounded,
+                    color: AppColors.female,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 지역
-            const Text(
-              '지역 *',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            _buildSectionTitle('지역', required: true),
             const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
+            _buildDropdown<String>(
               value: _selectedRegion,
-              decoration: InputDecoration(
-                hintText: '지역 선택',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
-              ),
+              hint: '지역 선택',
               items: _regions.map((region) {
                 return DropdownMenuItem(
                   value: region,
                   child: Text(region),
                 );
               }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedRegion = value;
-                });
-              },
+              onChanged: (value) => setState(() => _selectedRegion = value),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
 
             // 저장 버튼
             SizedBox(
               width: double.infinity,
               height: 56,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6C63FF),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        '시작하기',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          '시작하기',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, {bool required = false}) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        if (required)
+          const Text(
+            ' *',
+            style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    int maxLines = 1,
+    int maxLength = 100,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      maxLength: maxLength,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(color: AppColors.textHint),
+        counterStyle: TextStyle(color: AppColors.textTertiary),
+        filled: true,
+        fillColor: AppColors.card,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  Widget _buildDropdown<T>({
+    required T? value,
+    required String hint,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          hint: Text(hint, style: TextStyle(color: AppColors.textHint)),
+          isExpanded: true,
+          dropdownColor: AppColors.card,
+          style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textTertiary),
+          items: items,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGenderButton({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    final isSelected = _selectedGender == value;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedGender = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? color : AppColors.border,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? color : AppColors.textTertiary,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? color : AppColors.textSecondary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 15,
               ),
             ),
           ],

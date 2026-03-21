@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/post_model.dart';
 import '../../services/post_service.dart';
 import '../feed/post_detail_screen.dart';
@@ -13,34 +14,54 @@ class MyPostsScreen extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('내가 쓴 글'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0.5,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: StreamBuilder<List<PostModel>>(
         stream: postService.getMyPostsStream(uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+              child: CircularProgressIndicator(color: AppColors.primary),
             );
           }
 
           final posts = snapshot.data ?? [];
 
           if (posts.isEmpty) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.article_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.article_outlined, size: 40, color: AppColors.textTertiary),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
                     '작성한 글이 없어요',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -48,7 +69,7 @@ class MyPostsScreen extends StatelessWidget {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
@@ -79,13 +100,16 @@ class _PostListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -95,28 +119,32 @@ class _PostListItem extends StatelessWidget {
                 post.content,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 15, height: 1.4),
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: AppColors.textPrimary,
+                ),
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Text(
                     post.timeAgo,
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                   ),
                   const Spacer(),
-                  Icon(Icons.bookmark_border, size: 16, color: Colors.grey[500]),
-                  const SizedBox(width: 2),
+                  const Icon(Icons.bookmark_outline_rounded, size: 16, color: AppColors.textTertiary),
+                  const SizedBox(width: 4),
                   Text(
                     '${post.wardCount}',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                   ),
-                  const SizedBox(width: 12),
-                  Icon(Icons.chat_bubble_outline, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 2),
+                  const SizedBox(width: 14),
+                  const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: AppColors.textTertiary),
+                  const SizedBox(width: 4),
                   Text(
                     '${post.commentCount}',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
                   ),
                 ],
               ),

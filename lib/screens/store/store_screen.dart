@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/common_widgets.dart';
 import '../../services/purchase_service.dart';
@@ -18,11 +20,15 @@ class _StoreScreenState extends State<StoreScreen>
   late TabController _tabController;
   final _purchaseService = PurchaseService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
+  final _firestore = FirebaseFirestore.instance;
 
   bool _isLoading = true;
   bool _isPurchasing = false;
   int _currentPoints = 0;
   bool _isPremium = false;
+  int _dailyFreeChats = 1;
+  bool _hasClaimedRatingReward = false;
+  bool _hasClaimedPolicyReward = false;
 
   @override
   void initState() {
@@ -38,15 +44,36 @@ class _StoreScreenState extends State<StoreScreen>
   }
 
   Future<void> _loadUserData() async {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_uid)
-        .get();
+    final doc = await _firestore.collection('users').doc(_uid).get();
 
     if (doc.exists) {
+      final data = doc.data()!;
+      final isPremium = data['isPremium'] ?? false;
+      
+      // 일일 무료 채팅 리셋 체크
+      int dailyFreeChats = data['dailyFreeChats'] ?? 1;
+      final resetAt = (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate();
+      
+      if (resetAt != null) {
+        final now = DateTime.now();
+        final resetDate = DateTime(resetAt.year, resetAt.month, resetAt.day);
+        final today = DateTime(now.year, now.month, now.day);
+        
+        if (today.isAfter(resetDate)) {
+          dailyFreeChats = isPremium ? 2 : 1;
+          await _firestore.collection('users').doc(_uid).update({
+            'dailyFreeChats': dailyFreeChats,
+            'dailyFreeChatsResetAt': Timestamp.fromDate(now),
+          });
+        }
+      }
+
       setState(() {
-        _currentPoints = doc.data()?['points'] ?? 0;
-        _isPremium = doc.data()?['isPremium'] ?? false;
+        _currentPoints = data['points'] ?? 0;
+        _isPremium = isPremium;
+        _dailyFreeChats = dailyFreeChats;
+        _hasClaimedRatingReward = data['hasClaimedRatingReward'] ?? false;
+        _hasClaimedPolicyReward = data['hasClaimedPolicyReward'] ?? false;
       });
     }
   }
@@ -62,7 +89,6 @@ class _StoreScreenState extends State<StoreScreen>
       );
     }
 
-    // 구매 완료 후 데이터 새로고침 (약간의 딜레이)
     await Future.delayed(const Duration(seconds: 2));
     await _loadUserData();
 
@@ -86,6 +112,77 @@ class _StoreScreenState extends State<StoreScreen>
     setState(() => _isPurchasing = false);
   }
 
+  // 앱 스토어 평점 페이지 열기
+  Future<void> _openStoreRating() async {
+    final String storeUrl;
+    if (Platform.isIOS) {
+      storeUrl = 'https://apps.apple.com/app/id123456789?action=write-review'; // TODO: 실제 앱 ID로 변경
+    } else {
+      storeUrl = 'https://play.google.com/store/apps/details?id=com.feeder.app'; // TODO: 실제 패키지명으로 변경
+    }
+    
+    final uri = Uri.parse(storeUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      
+      // 보상 지급 (최초 1회)
+      if (!_hasClaimedRatingReward) {
+        await _claimRatingReward();
+      }
+    }
+  }
+
+  Future<void> _claimRatingReward() async {
+    await _firestore.collection('users').doc(_uid).update({
+      'points': FieldValue.increment(70),
+      'hasClaimedRatingReward': true,
+    });
+    
+    setState(() {
+      _currentPoints += 70;
+      _hasClaimedRatingReward = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🎉 평점 보상 70P가 지급되었습니다!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openPolicyAndClaimReward() async {
+    // 앱 정책 화면으로 이동
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const _PolicyRewardScreen()),
+    );
+    
+    // 보상 지급 (최초 1회)
+    if (!_hasClaimedPolicyReward) {
+      await _firestore.collection('users').doc(_uid).update({
+        'points': FieldValue.increment(50),
+        'hasClaimedPolicyReward': true,
+      });
+      
+      setState(() {
+        _currentPoints += 50;
+        _hasClaimedPolicyReward = true;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎉 정책 확인 보상 50P가 지급되었습니다!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -98,52 +195,75 @@ class _StoreScreenState extends State<StoreScreen>
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('상점'),
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
-        elevation: 0.5,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
+          unselectedLabelColor: AppColors.textTertiary,
           indicatorColor: AppColors.primary,
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerColor: AppColors.border.withOpacity(0.5),
           tabs: const [
             Tab(text: '포인트 충전'),
             Tab(text: '프리미엄'),
           ],
         ),
       ),
-      body: _isLoading
-          ? const AppLoading()
-          : Stack(
-              children: [
-                TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildPointsTab(),
-                    _buildPremiumTab(),
-                  ],
-                ),
-                if (_isPurchasing)
-                  Container(
-                    color: Colors.black26,
-                    child: const Center(
-                      child: Card(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Column(
+      body: SafeArea(
+        child: _isLoading
+            ? const AppLoading()
+            : Stack(
+                children: [
+                  TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildPointsTab(),
+                      _buildPremiumTab(),
+                    ],
+                  ),
+                  if (_isPurchasing)
+                    Container(
+                      color: AppColors.overlay,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(28),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: const Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              CircularProgressIndicator(),
+                              CircularProgressIndicator(color: AppColors.primary),
                               SizedBox(height: 16),
-                              Text('결제 처리 중...'),
+                              Text(
+                                '결제 처리 중...',
+                                style: TextStyle(color: AppColors.textPrimary),
+                              ),
                             ],
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -153,47 +273,141 @@ class _StoreScreenState extends State<StoreScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 현재 포인트
+          // 현재 포인트 & 무료 채팅 카드
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.primaryLight],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '내 포인트',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.monetization_on, color: Colors.amber, size: 32),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$_currentPoints P',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.diamond_rounded, color: Colors.white, size: 24),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      '내 포인트',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const Spacer(),
+                    // 일일 무료 채팅
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            '무료 $_dailyFreeChats회',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$_currentPoints',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'P',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '매일 자정에 무료 채팅 ${_isPremium ? 2 : 1}회가 충전돼요',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 24),
+
+          // 무료 포인트 받기 섹션
+          const Text(
+            '무료 포인트 받기',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 평점 남기기
+          _buildRewardCard(
+            icon: Icons.star_rounded,
+            iconColor: const Color(0xFFFFD700),
+            title: '앱 평점 남기기',
+            subtitle: Platform.isIOS ? 'App Store에서 평점 남기기' : 'Play Store에서 평점 남기기',
+            reward: 70,
+            isClaimed: _hasClaimedRatingReward,
+            onTap: _openStoreRating,
+          ),
+          const SizedBox(height: 10),
+
+          // 앱 정책 확인
+          _buildRewardCard(
+            icon: Icons.gavel_rounded,
+            iconColor: AppColors.primary,
+            title: '앱 정책 확인하기',
+            subtitle: '이용 정책을 확인하고 포인트 받기',
+            reward: 50,
+            isClaimed: _hasClaimedPolicyReward,
+            onTap: _openPolicyAndClaimReward,
+          ),
+          const SizedBox(height: 28),
 
           // 포인트 상품 목록
           const Text(
@@ -201,16 +415,15 @@ class _StoreScreenState extends State<StoreScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
 
           ...pointProducts.map((product) {
-            // 스토어에서 가격 가져오기 (폴백 가격 지원)
             final price = _purchaseService.getPrice(product.id);
             final canPurchase = _purchaseService.canPurchase(product.id);
             
-            // 스토어에서 실제 상품 정보 가져오기
             ProductDetails? productDetails;
             try {
               productDetails = _purchaseService.products
@@ -229,36 +442,121 @@ class _StoreScreenState extends State<StoreScreen>
             );
           }),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
           // 안내 문구
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border.withOpacity(0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '• 포인트로 채팅 신청을 할 수 있어요',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '• 채팅 신청 1회당 ${AppConstants.chatRequestCost}P가 사용돼요',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '• 구매한 포인트는 환불되지 않아요',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
+                _buildInfoRow('매일 무료 채팅 1회를 사용할 수 있어요 (프리미엄 2회)'),
+                const SizedBox(height: 8),
+                _buildInfoRow('무료 채팅은 다음날 자정에 소멸돼요'),
+                const SizedBox(height: 8),
+                _buildInfoRow('포인트로 추가 채팅 신청을 할 수 있어요 (1회 ${AppConstants.chatRequestCost}P)'),
+                const SizedBox(height: 8),
+                _buildInfoRow('구매한 포인트는 환불되지 않아요'),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRewardCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required int reward,
+    required bool isClaimed,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: isClaimed ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isClaimed ? AppColors.border.withOpacity(0.3) : AppColors.primary.withOpacity(0.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: isClaimed ? AppColors.textTertiary : AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isClaimed ? AppColors.textTertiary : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isClaimed ? AppColors.surface : AppColors.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: isClaimed
+                  ? const Row(
+                      children: [
+                        Icon(Icons.check, color: AppColors.textTertiary, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          '완료',
+                          style: TextStyle(
+                            color: AppColors.textTertiary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Text(
+                      '+${reward}P',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -280,13 +578,27 @@ class _StoreScreenState extends State<StoreScreen>
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFFD700).withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.workspace_premium, color: Colors.white, size: 32),
-                  SizedBox(width: 12),
-                  Column(
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
@@ -309,36 +621,44 @@ class _StoreScreenState extends State<StoreScreen>
           else
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey[200]!),
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.border.withOpacity(0.5)),
               ),
               child: Column(
                 children: [
-                  const Icon(
-                    Icons.workspace_premium,
-                    color: Color(0xFFFFD700),
-                    size: 48,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD700).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium_rounded,
+                      color: Color(0xFFFFD700),
+                      size: 40,
+                    ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   const Text(
                     '프리미엄으로 업그레이드',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  const Text(
                     '더 많은 혜택을 누려보세요',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ],
               ),
             ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
 
           // 프리미엄 혜택
           const Text(
@@ -346,35 +666,14 @@ class _StoreScreenState extends State<StoreScreen>
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
 
-          _buildBenefitItem(
-            Icons.chat_bubble,
-            '무제한 채팅 신청',
-            '포인트 소모 없이 채팅 신청',
-          ),
-          _buildBenefitItem(
-            Icons.visibility_off,
-            '프로필 조회 익명',
-            '내 프로필 조회 기록 숨기기',
-          ),
-          _buildBenefitItem(
-            Icons.bolt,
-            '우선 노출',
-            'Feed와 Shots에서 상위 노출',
-          ),
-          _buildBenefitItem(
-            Icons.star,
-            '프리미엄 배지',
-            '프로필에 프리미엄 배지 표시',
-          ),
-          _buildBenefitItem(
-            Icons.block,
-            '광고 제거',
-            '모든 광고 없이 쾌적하게',
-          ),
+          _buildBenefitItem(Icons.chat_bubble_rounded, '일일 보너스 채팅 +1회', '매일 무료 채팅 2회 제공'),
+          _buildBenefitItem(Icons.people_rounded, '접속 유저 성별 필터', '접속 중인 사람들을 성별로 필터링'),
+          _buildBenefitItem(Icons.block_rounded, '광고 제거', '모든 광고 없이 쾌적하게'),
 
           const SizedBox(height: 24),
 
@@ -385,11 +684,11 @@ class _StoreScreenState extends State<StoreScreen>
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
               ),
             ),
             const SizedBox(height: 12),
 
-            // 월간 구독
             _buildSubscriptionCard(
               title: '월간 구독',
               price: _purchaseService.getPrice(ProductIds.premiumMonthly) ?? '₩4,900',
@@ -403,14 +702,13 @@ class _StoreScreenState extends State<StoreScreen>
                   _purchase(product);
                 } catch (_) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('상품 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.')),
+                    const SnackBar(content: Text('상품 정보를 불러오는 중입니다')),
                   );
                 }
               },
             ),
             const SizedBox(height: 12),
 
-            // 연간 구독
             _buildSubscriptionCard(
               title: '연간 구독',
               price: _purchaseService.getPrice(ProductIds.premiumYearly) ?? '₩39,000',
@@ -425,7 +723,7 @@ class _StoreScreenState extends State<StoreScreen>
                   _purchase(product);
                 } catch (_) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('상품 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.')),
+                    const SnackBar(content: Text('상품 정보를 불러오는 중입니다')),
                   );
                 }
               },
@@ -434,40 +732,33 @@ class _StoreScreenState extends State<StoreScreen>
 
           const SizedBox(height: 24),
 
-          // 구매 복원
           Center(
             child: TextButton(
               onPressed: _restorePurchases,
-              child: const Text('구매 내역 복원'),
+              child: const Text(
+                '구매 내역 복원',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
             ),
           ),
 
           const SizedBox(height: 16),
 
-          // 안내 문구
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border.withOpacity(0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '• 구독은 자동으로 갱신됩니다',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '• 언제든지 설정에서 해지할 수 있어요',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '• 갱신일 24시간 전에 해지해야 다음 결제를 막을 수 있어요',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
+                _buildInfoRow('구독은 자동으로 갱신됩니다'),
+                const SizedBox(height: 8),
+                _buildInfoRow('언제든지 설정에서 해지할 수 있어요'),
+                const SizedBox(height: 8),
+                _buildInfoRow('갱신일 24시간 전에 해지해야 다음 결제를 막을 수 있어요'),
               ],
             ),
           ),
@@ -476,9 +767,30 @@ class _StoreScreenState extends State<StoreScreen>
     );
   }
 
+  Widget _buildInfoRow(String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('•  ', style: TextStyle(color: AppColors.textTertiary)),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 13, color: AppColors.textTertiary),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBenefitItem(IconData icon, String title, String subtitle) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+      ),
       child: Row(
         children: [
           Container(
@@ -488,9 +800,9 @@ class _StoreScreenState extends State<StoreScreen>
               color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppColors.primary),
+            child: Icon(icon, color: AppColors.primary, size: 22),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,18 +812,21 @@ class _StoreScreenState extends State<StoreScreen>
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: Colors.grey[600],
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
                     fontSize: 13,
                   ),
                 ),
               ],
             ),
           ),
+          const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 22),
         ],
       ),
     );
@@ -527,10 +842,10 @@ class _StoreScreenState extends State<StoreScreen>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isPopular ? AppColors.primary : Colors.grey[200]!,
+          color: isPopular ? AppColors.primary : AppColors.border.withOpacity(0.5),
           width: isPopular ? 2 : 1,
         ),
       ),
@@ -549,23 +864,25 @@ class _StoreScreenState extends State<StoreScreen>
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                          color: AppColors.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
                             price,
                             style: const TextStyle(
-                              fontSize: 20,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: AppColors.primary,
                             ),
                           ),
                           Text(
                             period,
-                            style: TextStyle(
-                              color: Colors.grey[600],
+                            style: const TextStyle(
+                              color: AppColors.textTertiary,
                               fontSize: 14,
                             ),
                           ),
@@ -574,13 +891,22 @@ class _StoreScreenState extends State<StoreScreen>
                     ],
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: onPurchase,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isPopular ? AppColors.primary : Colors.grey[200],
-                    foregroundColor: isPopular ? Colors.white : AppColors.textPrimary,
+                GestureDetector(
+                  onTap: onPurchase,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isPopular ? AppColors.primary : AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '구독',
+                      style: TextStyle(
+                        color: isPopular ? Colors.white : AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  child: const Text('구독'),
                 ),
               ],
             ),
@@ -590,12 +916,12 @@ class _StoreScreenState extends State<StoreScreen>
               top: 0,
               right: 0,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: const BoxDecoration(
-                  color: Colors.red,
+                  color: AppColors.error,
                   borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(12),
-                    bottomLeft: Radius.circular(12),
+                    topRight: Radius.circular(14),
+                    bottomLeft: Radius.circular(14),
                   ),
                 ),
                 child: Text(
@@ -630,26 +956,26 @@ class _PointProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border.withOpacity(0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.1),
+                color: const Color(0xFFFFD700).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.monetization_on, color: Colors.amber, size: 28),
+              child: const Icon(Icons.diamond_rounded, color: Color(0xFFFFD700), size: 26),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -661,21 +987,22 @@ class _PointProductCard extends StatelessWidget {
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       if (product.bonusPoints > 0) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.red,
-                            borderRadius: BorderRadius.circular(4),
+                            color: AppColors.error,
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            '+${product.bonusPoints}P 보너스',
+                            '+${product.bonusPoints}P',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -686,33 +1013,204 @@ class _PointProductCard extends StatelessWidget {
                   if (product.bonusPoints > 0)
                     Text(
                       '총 ${product.totalPoints}P',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 13,
+                      style: const TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 12,
                       ),
                     ),
                 ],
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                ElevatedButton(
-                  onPressed: onPurchase,
-                  child: Text(price ?? '로딩중'),
+            GestureDetector(
+              onTap: onPurchase,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                if (!isStoreAvailable && price != null)
-                  Text(
-                    '스토어 연결 필요',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[500],
-                    ),
+                child: Text(
+                  price ?? '로딩중',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
-              ],
+                ),
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// 정책 확인 보상 화면 (간단한 정책 요약)
+class _PolicyRewardScreen extends StatelessWidget {
+  const _PolicyRewardScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('앱 정책'),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // 보상 안내
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.card_giftcard, color: Colors.white, size: 28),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '정책 확인 보상',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '아래 내용을 확인하면 50P를 받을 수 있어요!',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            _buildPolicyItem(
+              icon: Icons.gavel_rounded,
+              title: '이용 정지 정책',
+              content: '커뮤니티 가이드라인 위반 시 1일~영구 정지가 부과될 수 있습니다.',
+            ),
+            _buildPolicyItem(
+              icon: Icons.security_rounded,
+              title: '불법 콘텐츠 대응',
+              content: '불법 콘텐츠는 즉시 삭제되며, 수사기관에 협조합니다.',
+            ),
+            _buildPolicyItem(
+              icon: Icons.repeat_rounded,
+              title: '동일 내용 반복 제한',
+              content: '도배성 글, 댓글은 삭제되며 정지 사유가 됩니다.',
+            ),
+            _buildPolicyItem(
+              icon: Icons.link_off_rounded,
+              title: '링크 및 광고 제한',
+              content: '외부 링크, 연락처 공유, 광고성 게시물이 금지됩니다.',
+            ),
+
+            const SizedBox(height: 24),
+
+            // 확인 버튼
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  '확인했어요',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPolicyItem({
+    required IconData icon,
+    required String title,
+    required String content,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.primary, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  content,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

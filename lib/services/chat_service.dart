@@ -11,23 +11,58 @@ class ChatService {
 
   static const int chatRequestCost = 100; // 채팅 신청 비용
 
+  // ========== 일일 무료 채팅 ==========
+
+  // 일일 무료 채팅 사용 가능 여부 확인 (리셋 포함)
+  Future<int> getAvailableDailyFreeChats(String userId) async {
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    final data = userDoc.data();
+    if (data == null) return 1;
+
+    final isPremium = data['isPremium'] ?? false;
+    final dailyFreeChats = data['dailyFreeChats'] ?? 1;
+    final resetAt = (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate();
+
+    if (resetAt == null) return isPremium ? 2 : 1;
+
+    final now = DateTime.now();
+    final resetDate = DateTime(resetAt.year, resetAt.month, resetAt.day);
+    final today = DateTime(now.year, now.month, now.day);
+
+    // 날짜가 바뀌었으면 리셋
+    if (today.isAfter(resetDate)) {
+      final newCount = isPremium ? 2 : 1;
+      await _firestore.collection('users').doc(userId).update({
+        'dailyFreeChats': newCount,
+        'dailyFreeChatsResetAt': Timestamp.fromDate(now),
+      });
+      return newCount;
+    }
+
+    return dailyFreeChats;
+  }
+
+  // 일일 무료 채팅 사용
+  Future<bool> useDailyFreeChat(String userId) async {
+    final available = await getAvailableDailyFreeChats(userId);
+    if (available <= 0) return false;
+
+    await _firestore.collection('users').doc(userId).update({
+      'dailyFreeChats': FieldValue.increment(-1),
+      'dailyFreeChatsResetAt': Timestamp.fromDate(DateTime.now()),
+    });
+    return true;
+  }
+
   // ========== 채팅 신청 ==========
 
-  // 채팅 신청 보내기
-  Future<bool> sendChatRequest({
+  // 채팅 신청 보내기 (무료 채팅 우선 사용)
+  Future<Map<String, dynamic>> sendChatRequest({
     required String fromUserId,
     required String toUserId,
     required UserModel fromUser,
     String? message,
   }) async {
-    // 포인트 확인
-    final userDoc = await _firestore.collection('users').doc(fromUserId).get();
-    final currentPoints = userDoc.data()?['points'] ?? 0;
-
-    if (currentPoints < chatRequestCost) {
-      return false; // 포인트 부족
-    }
-
     // 이미 보낸 신청이 있는지 확인
     final existingRequest = await _firestore
         .collection('chatRequests')
@@ -37,16 +72,37 @@ class ChatService {
         .get();
 
     if (existingRequest.docs.isNotEmpty) {
-      return false; // 이미 신청 중
+      return {'success': false, 'error': 'already_pending'};
+    }
+
+    // 무료 채팅 확인
+    final freeChats = await getAvailableDailyFreeChats(fromUserId);
+    final useFreeChat = freeChats > 0;
+
+    // 무료 채팅이 없으면 포인트 확인
+    if (!useFreeChat) {
+      final userDoc = await _firestore.collection('users').doc(fromUserId).get();
+      final currentPoints = userDoc.data()?['points'] ?? 0;
+
+      if (currentPoints < chatRequestCost) {
+        return {'success': false, 'error': 'insufficient_points'};
+      }
     }
 
     final batch = _firestore.batch();
 
-    // 포인트 차감
+    // 무료 채팅 사용 또는 포인트 차감
     final userRef = _firestore.collection('users').doc(fromUserId);
-    batch.update(userRef, {
-      'points': FieldValue.increment(-chatRequestCost),
-    });
+    if (useFreeChat) {
+      batch.update(userRef, {
+        'dailyFreeChats': FieldValue.increment(-1),
+        'dailyFreeChatsResetAt': Timestamp.fromDate(DateTime.now()),
+      });
+    } else {
+      batch.update(userRef, {
+        'points': FieldValue.increment(-chatRequestCost),
+      });
+    }
 
     // 채팅 신청 생성
     final requestRef = _firestore.collection('chatRequests').doc();
@@ -58,7 +114,8 @@ class ChatService {
       'fromUserProfileImageUrl': fromUser.profileImageUrl,
       'fromUserGender': fromUser.gender,
       'message': message,
-      'pointsSpent': chatRequestCost,
+      'pointsSpent': useFreeChat ? 0 : chatRequestCost,
+      'usedFreeChat': useFreeChat,
       'status': 'pending',
       'createdAt': Timestamp.fromDate(now),
       'respondedAt': null,
@@ -80,7 +137,7 @@ class ChatService {
       fromUserGender: fromUser.gender,
     );
 
-    return true;
+    return {'success': true, 'usedFreeChat': useFreeChat};
   }
 
   // 받은 채팅 신청 목록

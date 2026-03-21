@@ -8,6 +8,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/widgets/common_widgets.dart';
 import '../../models/post_model.dart';
 import '../../models/report_model.dart';
+import '../../models/user_model.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
 import '../../services/report_service.dart';
@@ -24,6 +25,7 @@ import '../../services/user_service.dart' show UserService;
 import '../../services/admob_service.dart';
 import '../common/report_dialog.dart';
 import '../notification/notifications_screen.dart';
+import '../discover/recent_users_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -40,6 +42,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final _userService = UserService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   bool _isPremium = false;
+  bool _isSuspended = false;
+  DateTime? _suspensionExpiresAt;
   final _interstitialController = InterstitialAdController();
   // Timer? _adTimer; ← 삭제
 
@@ -51,7 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadPremiumStatus();
+    _loadUserStatus();
     _interstitialController.preload();
     // 5분 타이머 삭제됨 - 탭 전환 시 체크로 변경
   }
@@ -63,10 +67,20 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadPremiumStatus() async {
+  Future<void> _loadUserStatus() async {
     final user = await _userService.getUser(_uid);
+    
     if (mounted && user != null) {
-      setState(() => _isPremium = user.isPremium);
+      setState(() {
+        _isPremium = user.isPremium;
+        _isSuspended = user.isSuspended;
+        _suspensionExpiresAt = user.suspensionExpiresAt;
+      });
+      
+      // 정지 상태면 My 탭으로 이동
+      if (user.isSuspended) {
+        setState(() => _currentIndex = 3);
+      }
     }
   }
 
@@ -92,73 +106,118 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor:
-            _currentIndex == 1 ? Colors.black : AppColors.background,
+        backgroundColor: AppColors.background,
         appBar: _currentIndex == 1
             ? null
             : AppBar(
                 title: Row(
                   children: [
                     Container(
-                      width: 28,
-                      height: 28,
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.rss_feed,
-                          color: Colors.white, size: 18),
+                      child: const Icon(Icons.local_fire_department_rounded,
+                          color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      '피더',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.3,
+                      ),
                     ),
                   ],
                 ),
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: AppColors.background,
+                foregroundColor: AppColors.textPrimary,
                 elevation: 0,
+                scrolledUnderElevation: 0,
                 actions: [
+                  // 최근 접속자 버튼
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border, width: 0.5),
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.people_outline_rounded, 
+                        size: 22,
+                        color: _isSuspended 
+                            ? AppColors.textTertiary.withOpacity(0.4)
+                            : AppColors.textSecondary,
+                      ),
+                      onPressed: _isSuspended ? null : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RecentUsersScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // 알림 버튼
                   StreamBuilder<int>(
                     stream: _notificationService.getUnreadCountStream(_uid),
                     builder: (context, snapshot) {
                       final unreadCount = snapshot.data ?? 0;
-                      return Stack(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.notifications_outlined),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const NotificationsScreen(),
+                      return Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border, width: 0.5),
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  Icons.notifications_outlined, 
+                                  size: 22,
+                                  color: _isSuspended 
+                                      ? AppColors.textTertiary.withOpacity(0.4)
+                                      : AppColors.textSecondary,
                                 ),
-                              );
-                            },
-                          ),
-                          if (unreadCount > 0)
-                            Positioned(
-                              right: 8,
-                              top: 8,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
-                                ),
-                                child: Text(
-                                  unreadCount > 9 ? '9+' : '$unreadCount',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
+                                onPressed: _isSuspended ? null : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const NotificationsScreen(),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
-                        ],
+                            if (unreadCount > 0 && !_isSuspended)
+                              Positioned(
+                                right: 0,
+                                top: 0,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: AppColors.background, width: 1.5),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -166,21 +225,34 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         body: _buildBody(),
         floatingActionButton: _currentIndex == 0
-            ? FloatingActionButton(
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PostWriteScreen(),
+            ? Container(
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
-                  );
-                  // 글 작성 후 즉시 새로고침
-                  if (result == true) {
-                    _feedKey.currentState?.refresh();
-                  }
-                },
-                backgroundColor: AppColors.primary,
-                child: const Icon(Icons.edit, color: Colors.white),
+                  ],
+                ),
+                child: FloatingActionButton(
+                  onPressed: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PostWriteScreen(),
+                      ),
+                    );
+                    if (result == true) {
+                      _feedKey.currentState?.refresh();
+                    }
+                  },
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  child: const Icon(Icons.edit_rounded, color: Colors.white),
+                ),
               )
             : null,
         bottomNavigationBar: _buildBottomNav(),
@@ -194,65 +266,112 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, snapshot) {
         final unreadCount = snapshot.data ?? 0;
 
-        return BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-            // 탭 전환 시 쿨타임(5분) 지났으면 전면 광고
-            _interstitialController.showIfIntervalPassed(isPremium: _isPremium);
-          },
-          type: BottomNavigationBarType.fixed,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: Colors.grey,
-          backgroundColor: _currentIndex == 1 ? Colors.black : Colors.white,
-          items: [
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.dynamic_feed_outlined),
-              activeIcon: Icon(Icons.dynamic_feed),
-              label: 'Feed',
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            border: Border(
+              top: BorderSide(color: AppColors.border.withOpacity(0.5), width: 0.5),
             ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.play_circle_outline),
-              activeIcon: Icon(Icons.play_circle),
-              label: 'Shots',
-            ),
-            BottomNavigationBarItem(
-              icon: Stack(
-                clipBehavior: Clip.none,
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  const Icon(Icons.chat_bubble_outline),
-                  if (unreadCount > 0)
-                    Positioned(
-                      right: -6,
-                      top: -4,
-                      child: UnreadBadge(count: unreadCount),
-                    ),
+                  _buildNavItem(
+                    index: 0,
+                    icon: Icons.article_outlined,
+                    activeIcon: Icons.article_rounded,
+                    label: 'Feed',
+                  ),
+                  _buildNavItem(
+                    index: 1,
+                    icon: Icons.play_circle_outline_rounded,
+                    activeIcon: Icons.play_circle_rounded,
+                    label: 'Shots',
+                  ),
+                  _buildNavItem(
+                    index: 2,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    activeIcon: Icons.chat_bubble_rounded,
+                    label: 'Chat',
+                    badge: unreadCount,
+                  ),
+                  _buildNavItem(
+                    index: 3,
+                    icon: Icons.person_outline_rounded,
+                    activeIcon: Icons.person_rounded,
+                    label: 'My',
+                  ),
                 ],
               ),
-              activeIcon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.chat_bubble),
-                  if (unreadCount > 0)
-                    Positioned(
-                      right: -6,
-                      top: -4,
-                      child: UnreadBadge(count: unreadCount),
-                    ),
-                ],
-              ),
-              label: '채팅',
             ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: '마이',
-            ),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildNavItem({
+    required int index,
+    required IconData icon,
+    required IconData activeIcon,
+    required String label,
+    int badge = 0,
+  }) {
+    final isActive = _currentIndex == index;
+    // 정지 상태일 때 My(3) 탭만 활성화
+    final isDisabled = _isSuspended && index != 3;
+    
+    return GestureDetector(
+      onTap: () {
+        if (isDisabled) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('정지 기간 중에는 이용이 제한됩니다'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+        setState(() => _currentIndex = index);
+        _interstitialController.showIfIntervalPassed(isPremium: _isPremium);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 64,
+        height: 48,
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.primary.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              isActive ? activeIcon : icon,
+              color: isDisabled 
+                  ? AppColors.textTertiary.withOpacity(0.4)
+                  : (isActive ? AppColors.primary : AppColors.textTertiary),
+              size: 26,
+            ),
+            if (badge > 0 && !isDisabled)
+              Positioned(
+                right: 12,
+                top: 6,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.error,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -498,58 +617,102 @@ class _PostCardState extends State<_PostCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final isAuthor = uid == widget.post.authorId;
+    
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border.withOpacity(0.5), width: 0.5),
       ),
       child: InkWell(
         onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 익명 정보 + 시간
-              Row(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 헤더 영역
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              child: Row(
                 children: [
-                  GenderBadge(gender: widget.post.authorGender),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    widget.post.timeAgo,
-                    style: AppTextStyles.caption,
+                  // 성별 인디케이터 (새 디자인)
+                  GenderBadge(gender: widget.post.authorGender, size: 40),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '익명',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GenderTextBadge(gender: widget.post.authorGender),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.post.timeAgo,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const Spacer(),
+                  // 더보기 버튼
                   GestureDetector(
                     onTap: () => _showPostOptions(context),
-                    child: Icon(
-                      Icons.more_horiz,
-                      color: AppColors.textHint,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.more_vert_rounded,
+                        color: AppColors.textTertiary,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+            ),
 
-              // 본문
-              Text(
+            // 본문
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
                 widget.post.content,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   height: 1.5,
+                  color: AppColors.textPrimary,
                 ),
                 maxLines: 5,
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
 
-              // 이미지
-              if (widget.post.imageUrl != null &&
-                  widget.post.imageUrl!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+            // 이미지
+            if (widget.post.imageUrl != null &&
+                widget.post.imageUrl!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
                   child: CachedNetworkImage(
                     imageUrl: widget.post.imageUrl!,
                     width: double.infinity,
@@ -557,73 +720,133 @@ class _PostCardState extends State<_PostCard> {
                     fit: BoxFit.cover,
                     placeholder: (context, url) => Container(
                       height: 200,
-                      color: Colors.grey[200],
+                      color: AppColors.cardLight,
                       child: const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFF6C63FF),
+                          color: AppColors.primary,
+                          strokeWidth: 2,
                         ),
                       ),
                     ),
                     errorWidget: (context, url, error) => Container(
                       height: 200,
-                      color: Colors.grey[200],
-                      child: const Icon(Icons.image_not_supported),
+                      color: AppColors.cardLight,
+                      child: Icon(Icons.image_not_supported, 
+                        color: AppColors.textTertiary),
                     ),
                   ),
                 ),
-              ],
+              ),
+            ],
 
-              const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-              // 와드, 댓글
-              Row(
+            // 액션 영역 (하단 분리)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(AppRadius.lg),
+                  bottomRight: Radius.circular(AppRadius.lg),
+                ),
+                border: Border(
+                  top: BorderSide(color: AppColors.border.withOpacity(0.3), width: 0.5),
+                ),
+              ),
+              child: Row(
                 children: [
+                  // 와드 버튼
                   GestureDetector(
                     onTap: _toggleWard,
                     child: Row(
                       children: [
                         Icon(
-                          _isWarded ? Icons.bookmark : Icons.bookmark_border,
-                          size: 20,
-                          color: _isWarded
-                              ? const Color(0xFF6C63FF)
-                              : Colors.grey[600],
+                          _isWarded ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                          size: 18,
+                          color: _isWarded ? AppColors.primary : AppColors.textTertiary,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '와드 $_wardCount',
+                          '$_wardCount',
                           style: TextStyle(
-                            color: _isWarded
-                                ? const Color(0xFF6C63FF)
-                                : Colors.grey[600],
-                            fontSize: 13,
+                            color: _isWarded ? AppColors.primary : AppColors.textTertiary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 20),
+                  // 댓글 버튼
                   Row(
                     children: [
                       Icon(
-                        Icons.chat_bubble_outline,
+                        Icons.chat_bubble_outline_rounded,
                         size: 18,
-                        color: Colors.grey[600],
+                        color: AppColors.textTertiary,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '댓글 ${widget.post.commentCount}',
+                        '${widget.post.commentCount}',
                         style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 13,
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
+                  const Spacer(),
+                  // 채팅하기 버튼 (자기 글이 아닐 때만)
+                  if (!isAuthor)
+                    GestureDetector(
+                      onTap: () async {
+                        final userService = UserService();
+                        final myUser = await userService.getUser(uid!);
+                        if (myUser != null && context.mounted) {
+                          showDialog(
+                            context: context,
+                            builder: (context) => ChatRequestDialog(
+                              toUserId: widget.post.authorId,
+                              toUserNickname: '익명',
+                              fromUser: myUser,
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '채팅하기',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

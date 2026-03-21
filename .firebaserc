@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "feeder-dc220"
-  }
+    "default": "feeder-dc220",
+    "staging": "feeder-dc220"
+  },
+  "targets": {},
+  "etags": {}
 }

@@ -36,36 +36,57 @@ class AppConstants {
   static const int shotExpirationHours = 24;
 }
 
-/// 앱 컬러
+/// 앱 컬러 - 다크 모던 테마
 class AppColors {
   AppColors._();
 
   // 메인 컬러
-  static const Color primary = Color(0xFF6C63FF);
-  static const Color primaryLight = Color(0xFF9D97FF);
-  static const Color primaryDark = Color(0xFF4A42D4);
+  static const Color primary = Color(0xFF8B5CF6);
+  static const Color primaryLight = Color(0xFFA78BFA);
+  static const Color primaryDark = Color(0xFF7C3AED);
+  
+  // 그라데이션
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [Color(0xFF8B5CF6), Color(0xFFA855F7)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   // 성별 컬러
-  static const Color male = Color(0xFF42A5F5);
-  static const Color female = Color(0xFFEC407A);
-  static const Color maleLight = Color(0xFFE3F2FD);
-  static const Color femaleLight = Color(0xFFFCE4EC);
+  static const Color male = Color(0xFF60A5FA);
+  static const Color female = Color(0xFFFB7185);
+  static const Color maleLight = Color(0xFF60A5FA);
+  static const Color femaleLight = Color(0xFFFB7185);
+  static const Color maleBg = Color(0x3360A5FA);
+  static const Color femaleBg = Color(0x33FB7185);
 
-  // 기본 컬러
-  static const Color background = Color(0xFFF5F5F5);
-  static const Color surface = Colors.white;
-  static const Color error = Color(0xFFE53935);
-  static const Color success = Color(0xFF43A047);
-  static const Color warning = Color(0xFFFFA726);
+  // 다크 배경
+  static const Color background = Color(0xFF000000);
+  static const Color surface = Color(0xFF0A0A0B);
+  static const Color card = Color(0xFF111113);
+  static const Color cardLight = Color(0xFF18181B);
+  
+  // 보더
+  static const Color border = Color(0xFF27272A);
+  static const Color borderLight = Color(0xFF3F3F46);
+
+  // 상태 컬러
+  static const Color error = Color(0xFFEF4444);
+  static const Color success = Color(0xFF22C55E);
+  static const Color warning = Color(0xFFF59E0B);
 
   // 텍스트 컬러
-  static const Color textPrimary = Color(0xFF212121);
-  static const Color textSecondary = Color(0xFF757575);
-  static const Color textHint = Color(0xFFBDBDBD);
+  static const Color textPrimary = Color(0xFFF4F4F5);
+  static const Color textSecondary = Color(0xFFA1A1AA);
+  static const Color textTertiary = Color(0xFF71717A);
+  static const Color textHint = Color(0xFF52525B);
 
   // 기타
-  static const Color divider = Color(0xFFE0E0E0);
-  static const Color disabled = Color(0xFFBDBDBD);
+  static const Color divider = Color(0xFF27272A);
+  static const Color disabled = Color(0xFF3F3F46);
+  
+  // 오버레이
+  static const Color overlay = Color(0x80000000);
 }
 
 /// 앱 텍스트 스타일
@@ -77,12 +98,14 @@ class AppTextStyles {
     fontSize: 24,
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
+    letterSpacing: -0.5,
   );
 
   static const TextStyle h2 = TextStyle(
     fontSize: 20,
     fontWeight: FontWeight.bold,
     color: AppColors.textPrimary,
+    letterSpacing: -0.3,
   );
 
   static const TextStyle h3 = TextStyle(
@@ -93,7 +116,7 @@ class AppTextStyles {
 
   // 본문
   static const TextStyle body1 = TextStyle(
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: FontWeight.normal,
     color: AppColors.textPrimary,
     height: 1.5,
@@ -112,10 +135,22 @@ class AppTextStyles {
     fontWeight: FontWeight.normal,
     color: AppColors.textSecondary,
   );
+  
+  static const TextStyle captionSmall = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.normal,
+    color: AppColors.textTertiary,
+  );
 
   // 버튼
   static const TextStyle button = TextStyle(
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: Colors.white,
+  );
+  
+  static const TextStyle buttonSmall = TextStyle(
+    fontSize: 12,
     fontWeight: FontWeight.w600,
     color: Colors.white,
   );
@@ -137,9 +172,32 @@ class AppSpacing {
 class AppRadius {
   AppRadius._();
 
+  static const double xs = 4.0;
   static const double sm = 8.0;
   static const double md = 12.0;
   static const double lg = 16.0;
-  static const double xl = 24.0;
+  static const double xl = 20.0;
+  static const double xxl = 24.0;
   static const double full = 999.0;
+}
+
+/// 앱 그림자
+class AppShadows {
+  AppShadows._();
+  
+  static List<BoxShadow> get card => [
+    BoxShadow(
+      color: Colors.black.withOpacity(0.2),
+      blurRadius: 10,
+      offset: const Offset(0, 4),
+    ),
+  ];
+  
+  static List<BoxShadow> get button => [
+    BoxShadow(
+      color: AppColors.primary.withOpacity(0.3),
+      blurRadius: 12,
+      offset: const Offset(0, 4),
+    ),
+  ];
 }

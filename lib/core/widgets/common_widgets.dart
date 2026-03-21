@@ -175,7 +175,7 @@ class AppErrorState extends StatelessWidget {
   }
 }
 
-/// 성별 배지
+/// 성별 배지 - 새로운 링 스타일
 class GenderBadge extends StatelessWidget {
   final String gender;
   final double size;
@@ -184,22 +184,67 @@ class GenderBadge extends StatelessWidget {
   const GenderBadge({
     super.key,
     required this.gender,
-    this.size = 18,
+    this.size = 40,
     this.showBorder = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isMale = gender == 'male';
+    final color = isMale ? AppColors.male : AppColors.female;
+    final bgColor = isMale ? AppColors.maleBg : AppColors.femaleBg;
+    
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: isMale ? AppColors.male : AppColors.female,
         shape: BoxShape.circle,
-        border: showBorder
-            ? Border.all(color: Colors.white, width: 2)
-            : null,
+        gradient: RadialGradient(
+          colors: [bgColor, bgColor.withOpacity(0.3)],
+        ),
+      ),
+      child: Center(
+        child: Container(
+          width: size * 0.8,
+          height: size * 0.8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.card,
+          ),
+          child: Center(
+            child: Container(
+              width: size * 0.25,
+              height: size * 0.25,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 성별 텍스트 배지
+class GenderTextBadge extends StatelessWidget {
+  final String gender;
+  
+  const GenderTextBadge({
+    super.key,
+    required this.gender,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    final isMale = gender == 'male';
+    return Text(
+      isMale ? '남' : '여',
+      style: TextStyle(
+        fontSize: 12,
+        color: isMale ? AppColors.male : AppColors.female,
+        fontWeight: FontWeight.w500,
       ),
     );
   }

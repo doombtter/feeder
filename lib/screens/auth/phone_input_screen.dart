@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../core/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import 'otp_verify_screen.dart';
 
@@ -19,7 +20,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   void initState() {
     super.initState();
-    // reCAPTCHA 설정 - 인증 후 자동으로 숨김
     FirebaseAuth.instance.setSettings(
       appVerificationDisabledForTesting: false,
     );
@@ -32,7 +32,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   }
 
   String _formatPhoneNumber(String phone) {
-    // 010-1234-5678 또는 01012345678 -> +821012345678
     String cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleaned.startsWith('0')) {
       cleaned = cleaned.substring(1);
@@ -45,7 +44,10 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     
     if (phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('전화번호를 입력해주세요')),
+        SnackBar(
+          content: const Text('전화번호를 입력해주세요'),
+          backgroundColor: AppColors.card,
+        ),
       );
       return;
     }
@@ -75,11 +77,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         );
       },
       onAutoVerify: (credential) async {
-        // 자동 인증 성공 시
         setState(() => _isLoading = false);
         try {
           await _authService.signInWithCredential(credential);
-          // 로그인 성공 - main.dart의 authStateChanges가 처리
         } catch (e) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('로그인 실패: $e')),
@@ -92,7 +92,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -100,12 +100,34 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 60),
+              // 로고
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.local_fire_department_rounded,
+                  size: 28,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 24),
               const Text(
                 '피더',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF6C63FF),
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
@@ -113,71 +135,116 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 '익명으로 소통하는 공간',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 48),
               const Text(
                 '전화번호로 시작하기',
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(11),
-                ],
-                decoration: InputDecoration(
-                  hintText: '01012345678',
-                  prefixIcon: const Icon(Icons.phone),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // 전화번호 입력
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF6C63FF),
-                      width: 2,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: '01012345678',
+                    hintStyle: TextStyle(color: AppColors.textHint),
+                    prefixIcon: Container(
+                      padding: const EdgeInsets.all(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.phone_rounded,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 18,
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 24),
+              // 인증 버튼
               SizedBox(
                 width: double.infinity,
                 height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _sendOTP,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6C63FF),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          '인증번호 받기',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _sendOTP,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            '인증번호 받기',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
               const Spacer(),
-              const Center(
+              Center(
                 child: Text(
                   '계속 진행하면 서비스 이용약관에 동의하게 됩니다.',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey,
+                    color: AppColors.textTertiary,
                   ),
                 ),
               ),

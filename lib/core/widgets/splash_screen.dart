@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_constants.dart';
 
-/// 스플래시 화면
+/// 스플래시 화면 - 다크 모던
 class SplashScreen extends StatefulWidget {
   final VoidCallback onComplete;
 
@@ -16,6 +16,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _glowAnimation;
 
   @override
   void initState() {
@@ -39,11 +40,19 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
+    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeInOut),
+      ),
+    );
+
     _controller.forward();
 
-    // 2초 후 완료
     Future.delayed(const Duration(milliseconds: 2000), () {
-      widget.onComplete();
+      if (mounted) {
+        widget.onComplete();
+      }
     });
   }
 
@@ -56,57 +65,58 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: AppColors.background,
       body: Center(
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, child) {
-            return FadeTransition(
-              opacity: _fadeAnimation,
-              child: ScaleTransition(
-                scale: _scaleAnimation,
+            return Opacity(
+              opacity: _fadeAnimation.value,
+              child: Transform.scale(
+                scale: _scaleAnimation.value,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // 로고 아이콘
+                    // 로고 아이콘 with glow
                     Container(
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(28),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
+                            color: AppColors.primary.withOpacity(0.4 * _glowAnimation.value),
+                            blurRadius: 30 * _glowAnimation.value,
+                            spreadRadius: 5 * _glowAnimation.value,
                           ),
                         ],
                       ),
                       child: const Icon(
-                        Icons.chat_bubble_rounded,
+                        Icons.local_fire_department_rounded,
                         size: 50,
-                        color: AppColors.primary,
+                        color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: 24),
                     // 앱 이름
                     const Text(
                       '피더',
                       style: TextStyle(
-                        fontSize: 32,
+                        fontSize: 36,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                         letterSpacing: 2,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
+                    const SizedBox(height: 8),
                     // 슬로건
                     Text(
                       '익명으로 소통하는 공간',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],

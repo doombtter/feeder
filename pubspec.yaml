@@ -26,7 +26,8 @@ dependencies:
   in_app_purchase: ^3.2.0
   flutter_dotenv: ^5.1.0
   google_mobile_ads: ^7.0.0
-  firebase_analytics: ^11.3.6  # 추가
+  firebase_analytics: ^11.3.6
+  url_launcher: ^6.2.1
 
 dev_dependencies:
   flutter_test:

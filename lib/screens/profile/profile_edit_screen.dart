@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
+import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -27,23 +28,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   bool _nicknameChanged = false;
 
   final List<String> _regions = [
-    '서울특별시',
-    '부산광역시',
-    '대구광역시',
-    '인천광역시',
-    '광주광역시',
-    '대전광역시',
-    '울산광역시',
-    '세종특별자치시',
-    '경기도',
-    '강원도',
-    '충청북도',
-    '충청남도',
-    '전라북도',
-    '전라남도',
-    '경상북도',
-    '경상남도',
-    '제주특별자치도',
+    '서울특별시', '부산광역시', '대구광역시', '인천광역시', '광주광역시',
+    '대전광역시', '울산광역시', '세종특별자치시', '경기도', '강원도',
+    '충청북도', '충청남도', '전라북도', '전라남도', '경상북도',
+    '경상남도', '제주특별자치도',
   ];
 
   @override
@@ -81,26 +69,21 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
 
     if (pickedFile != null) {
-      // 이미지 크롭
       final croppedFile = await ImageCropper().cropImage(
         sourcePath: pickedFile.path,
         uiSettings: [
           AndroidUiSettings(
             toolbarTitle: '프로필 이미지 편집',
-            toolbarColor: const Color(0xFF6C63FF),
+            toolbarColor: AppColors.primary,
             toolbarWidgetColor: Colors.white,
             initAspectRatio: CropAspectRatioPreset.square,
             lockAspectRatio: true,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.square,
-            ],
+            aspectRatioPresets: [CropAspectRatioPreset.square],
           ),
           IOSUiSettings(
             title: '프로필 이미지 편집',
             aspectRatioLockEnabled: true,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.square,
-            ],
+            aspectRatioPresets: [CropAspectRatioPreset.square],
           ),
         ],
       );
@@ -142,7 +125,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       return;
     }
 
-    // 닉네임 변경 체크
     _nicknameChanged = nickname != widget.user.nickname;
     if (_nicknameChanged && !widget.user.canChangeNickname) {
       _showError('닉네임은 30일에 한 번만 변경 가능합니다.\n${widget.user.daysUntilNicknameChange}일 후에 변경 가능해요.');
@@ -152,7 +134,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 새 이미지 S3 업로드
       List<String> allImageUrls = List.from(_existingImageUrls);
       for (final file in _newImages) {
         final url = await S3Service.uploadProfileImage(
@@ -199,12 +180,25 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('프로필 수정'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0.5,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -214,15 +208,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFF6C63FF),
+                      color: AppColors.primary,
                     ),
                   )
                 : GestureDetector(
                     onTap: _saveProfile,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6C63FF),
+                        gradient: AppColors.primaryGradient,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
@@ -239,92 +233,50 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 프로필 이미지들 (최대 3개)
-            const Text(
-              '프로필 이미지',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '최대 3장까지 등록 가능합니다',
-              style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-            ),
+            // 프로필 이미지
+            _buildSectionTitle('프로필 이미지', subtitle: '최대 3장까지 등록 가능'),
             const SizedBox(height: 12),
             SizedBox(
-              height: 100,
+              height: 88,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  // 기존 이미지
                   for (int i = 0; i < _existingImageUrls.length; i++)
                     _buildImageItem(
                       imageUrl: _existingImageUrls[i],
                       onRemove: () => _removeExistingImage(i),
                     ),
-                  // 새 이미지
                   for (int i = 0; i < _newImages.length; i++)
                     _buildImageItem(
                       file: _newImages[i],
                       onRemove: () => _removeNewImage(i),
                     ),
-                  // 추가 버튼
-                  if (_totalImageCount < 3)
-                    GestureDetector(
-                      onTap: _pickImage,
-                      child: Container(
-                        width: 80,
-                        height: 80,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey[300]!),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add_photo_alternate,
-                                color: Colors.grey[500]),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$_totalImageCount/3',
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                  if (_totalImageCount < 3) _buildAddImageButton(),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
 
             // 닉네임
             Row(
               children: [
-                const Text(
-                  '닉네임',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                _buildSectionTitle('닉네임'),
                 if (!widget.user.canChangeNickname) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(10),
+                      color: AppColors.warning.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${widget.user.daysUntilNicknameChange}일 후 변경 가능',
                       style: TextStyle(
-                        color: Colors.orange[700],
+                        color: AppColors.warning,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -333,151 +285,165 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ],
               ],
             ),
-            const SizedBox(height: 8),
-            TextField(
+            const SizedBox(height: 10),
+            _buildTextField(
               controller: _nicknameController,
+              hintText: '2~10자 입력',
               maxLength: 10,
               enabled: widget.user.canChangeNickname,
-              decoration: InputDecoration(
-                hintText: '2~10자 입력',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                disabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
-                filled: true,
-                fillColor: widget.user.canChangeNickname ? Colors.white : Colors.grey[100],
-              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 자기소개
-            const Text(
-              '자기소개',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            TextField(
+            _buildSectionTitle('자기소개'),
+            const SizedBox(height: 10),
+            _buildTextField(
               controller: _bioController,
+              hintText: '간단한 자기소개를 입력해주세요',
               maxLength: 100,
               maxLines: 3,
-              decoration: InputDecoration(
-                hintText: '간단한 자기소개를 입력해주세요',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
-              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 출생년도 (수정 불가)
-            const Text(
-              '출생년도',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            _buildSectionTitle('출생년도'),
+            const SizedBox(height: 10),
+            _buildLockedField(
+              value: '${widget.user.birthYear}년 (만 ${widget.user.age}세)',
             ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    '${widget.user.birthYear}년 (만 ${widget.user.age}세)',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.lock, size: 18, color: Colors.grey[400]),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 성별 (수정 불가)
-            const Text(
-              '성별',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            _buildSectionTitle('성별'),
+            const SizedBox(height: 10),
+            _buildLockedField(
+              value: widget.user.gender == 'male' ? '남자' : '여자',
             ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    widget.user.gender == 'male' ? '남자' : '여자',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.lock, size: 18, color: Colors.grey[400]),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // 지역
-            const Text(
-              '지역',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedRegion,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF6C63FF),
-                    width: 2,
-                  ),
-                ),
+            _buildSectionTitle('지역'),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
               ),
-              items: _regions.map((region) {
-                return DropdownMenuItem(value: region, child: Text(region));
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedRegion = value;
-                });
-              },
+              child: DropdownButtonFormField<String>(
+                value: _selectedRegion,
+                dropdownColor: AppColors.card,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary),
+                items: _regions.map((region) {
+                  return DropdownMenuItem(value: region, child: Text(region));
+                }).toList(),
+                onChanged: (value) {
+                  setState(() => _selectedRegion = value);
+                },
+              ),
             ),
-            // 하단 여백 추가
             const SizedBox(height: 100),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, {String? subtitle}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    int maxLength = 100,
+    int maxLines = 1,
+    bool enabled = true,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLength: maxLength,
+      maxLines: maxLines,
+      enabled: enabled,
+      style: TextStyle(
+        color: enabled ? AppColors.textPrimary : AppColors.textTertiary,
+        fontSize: 15,
+      ),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(color: AppColors.textHint),
+        counterStyle: const TextStyle(color: AppColors.textTertiary),
+        filled: true,
+        fillColor: enabled ? AppColors.card : AppColors.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: AppColors.border.withOpacity(0.5)),
+        ),
+        contentPadding: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  Widget _buildLockedField({required String value}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textTertiary,
+            ),
+          ),
+          const Spacer(),
+          const Icon(Icons.lock_rounded, size: 16, color: AppColors.textTertiary),
+        ],
       ),
     );
   }
@@ -492,9 +458,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         Container(
           width: 80,
           height: 80,
-          margin: const EdgeInsets.only(right: 8),
+          margin: const EdgeInsets.only(right: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
             image: DecorationImage(
               image: file != null
                   ? FileImage(file) as ImageProvider
@@ -505,20 +472,49 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ),
         Positioned(
           top: 4,
-          right: 12,
+          right: 14,
           child: GestureDetector(
             onTap: onRemove,
             child: Container(
               padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
+              decoration: BoxDecoration(
+                color: AppColors.error,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.close, size: 14, color: Colors.white),
+              child: const Icon(Icons.close_rounded, size: 12, color: Colors.white),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAddImageButton() {
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border, style: BorderStyle.solid),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_photo_alternate_outlined, color: AppColors.textTertiary, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              '$_totalImageCount/3',
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

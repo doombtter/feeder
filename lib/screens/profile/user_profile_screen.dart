@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 import '../../models/report_model.dart';
 import '../../services/user_service.dart';
@@ -68,16 +69,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('사용자 차단'),
-          content: Text('${_user?.nickname ?? '사용자'}님을 차단하시겠습니까?\n차단하면 서로의 글과 메시지를 볼 수 없습니다.'),
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('사용자 차단', style: TextStyle(color: AppColors.textPrimary)),
+          content: Text(
+            '${_user?.nickname ?? '사용자'}님을 차단하시겠습니까?\n차단하면 서로의 글과 메시지를 볼 수 없습니다.',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('취소'),
+              child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('차단', style: TextStyle(color: Colors.red)),
+              child: const Text('차단', style: TextStyle(color: AppColors.error)),
             ),
           ],
         ),
@@ -101,81 +107,105 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: Colors.grey[100],
+        backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0.5,
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+          child: CircularProgressIndicator(color: AppColors.primary),
         ),
       );
     }
 
     if (_user == null) {
       return Scaffold(
-        backgroundColor: Colors.grey[100],
+        backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0.5,
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
         ),
         body: const Center(
-          child: Text('사용자를 찾을 수 없습니다'),
+          child: Text('사용자를 찾을 수 없습니다', style: TextStyle(color: AppColors.textSecondary)),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
           // 프로필 이미지 슬라이더
           SliverAppBar(
             expandedHeight: MediaQuery.of(context).size.width,
             pinned: true,
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
+            backgroundColor: AppColors.background,
+            foregroundColor: AppColors.textPrimary,
+            leading: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.card.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
             actions: [
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'report':
-                      showReportDialog(
-                        context,
-                        targetId: widget.userId,
-                        targetType: ReportTargetType.user,
-                        targetName: _user?.nickname,
-                      );
-                      break;
-                    case 'block':
-                      _toggleBlock();
-                      break;
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'report',
-                    child: Row(
-                      children: [
-                        Icon(Icons.flag_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('신고하기'),
-                      ],
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.card.withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  PopupMenuItem(
-                    value: 'block',
-                    child: Row(
-                      children: [
-                        Icon(_isBlocked ? Icons.check_circle : Icons.block, size: 20),
-                        const SizedBox(width: 8),
-                        Text(_isBlocked ? '차단 해제' : '차단하기'),
-                      ],
-                    ),
+                  child: PopupMenuButton<String>(
+                    color: AppColors.card,
+                    icon: const Icon(Icons.more_vert_rounded, size: 20),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'report':
+                          showReportDialog(
+                            context,
+                            targetId: widget.userId,
+                            targetType: ReportTargetType.user,
+                            targetName: _user?.nickname,
+                          );
+                          break;
+                        case 'block':
+                          _toggleBlock();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'report',
+                        child: Row(
+                          children: [
+                            Icon(Icons.flag_outlined, size: 20, color: AppColors.textSecondary),
+                            const SizedBox(width: 8),
+                            Text('신고하기', style: TextStyle(color: AppColors.textPrimary)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'block',
+                        child: Row(
+                          children: [
+                            Icon(_isBlocked ? Icons.check_circle : Icons.block, 
+                                 size: 20, color: AppColors.textSecondary),
+                            const SizedBox(width: 8),
+                            Text(_isBlocked ? '차단 해제' : '차단하기', 
+                                 style: TextStyle(color: AppColors.textPrimary)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -193,23 +223,42 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               imageUrl: _user!.profileImageUrls[index],
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
-                                color: Colors.grey[200],
+                                color: AppColors.cardLight,
                                 child: const Center(
                                   child: CircularProgressIndicator(
-                                    color: Color(0xFF6C63FF),
+                                    color: AppColors.primary,
                                   ),
                                 ),
                               ),
                               errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[200],
+                                color: AppColors.cardLight,
                                 child: const Icon(
                                   Icons.person,
                                   size: 100,
-                                  color: Colors.grey,
+                                  color: AppColors.textTertiary,
                                 ),
                               ),
                             );
                           },
+                        ),
+                        // 그라데이션 오버레이
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: 100,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  AppColors.background.withOpacity(0.8),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                         // 이미지 인디케이터
                         if (_user!.profileImageUrls.length > 1)
@@ -228,8 +277,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: _currentImageIndex == index
-                                        ? Colors.white
-                                        : Colors.white.withOpacity(0.5),
+                                        ? AppColors.primary
+                                        : AppColors.textTertiary,
                                   ),
                                 ),
                               ),
@@ -238,11 +287,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ],
                     )
                   : Container(
-                      color: Colors.grey[200],
+                      color: AppColors.cardLight,
                       child: const Icon(
                         Icons.person,
                         size: 100,
-                        color: Colors.grey,
+                        color: AppColors.textTertiary,
                       ),
                     ),
             ),
@@ -258,8 +307,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border.withOpacity(0.5)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,26 +321,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                              horizontal: 10,
+                              vertical: 5,
                             ),
                             decoration: BoxDecoration(
                               color: _user!.gender == 'male'
-                                  ? Colors.blue[50]
-                                  : Colors.pink[50],
+                                  ? AppColors.maleBg
+                                  : AppColors.femaleBg,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
                               _user!.gender == 'male' ? '남성' : '여성',
                               style: TextStyle(
                                 color: _user!.gender == 'male'
-                                    ? Colors.blue[700]
-                                    : Colors.pink[700],
+                                    ? AppColors.male
+                                    : AppColors.female,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -299,9 +350,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      _buildInfoRow(Icons.cake, '${_user!.age}세'),
-                      const SizedBox(height: 8),
-                      _buildInfoRow(Icons.location_on, _user!.region),
+                      _buildInfoRow(Icons.cake_rounded, '${_user!.age}세'),
+                      const SizedBox(height: 10),
+                      _buildInfoRow(Icons.location_on_rounded, _user!.region),
                     ],
                   ),
                 ),
@@ -313,8 +364,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border.withOpacity(0.5)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,6 +376,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -332,6 +385,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           style: const TextStyle(
                             fontSize: 15,
                             height: 1.5,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -350,13 +404,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget _buildInfoRow(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.grey[600]),
-        const SizedBox(width: 8),
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: AppColors.textTertiary),
+        ),
+        const SizedBox(width: 10),
         Text(
           text,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 15,
-            color: Colors.grey[700],
+            color: AppColors.textSecondary,
           ),
         ),
       ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/chat_request_model.dart';
 import '../../models/user_model.dart';
 import '../../services/chat_service.dart';
@@ -18,43 +19,54 @@ class ReceivedRequestsScreen extends StatelessWidget {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('받은 채팅 신청'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0.5,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: StreamBuilder<List<ChatRequestModel>>(
         stream: chatService.getReceivedRequests(uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF6C63FF),
-              ),
+              child: CircularProgressIndicator(color: AppColors.primary),
             );
           }
 
           final requests = snapshot.data ?? [];
 
           if (requests.isEmpty) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.mail_outline,
-                    size: 64,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    '받은 채팅 신청이 없어요',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey,
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      shape: BoxShape.circle,
                     ),
+                    child: const Icon(Icons.mail_outline_rounded, size: 40, color: AppColors.textTertiary),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '받은 채팅 신청이 없어요',
+                    style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -62,7 +74,7 @@ class ReceivedRequestsScreen extends StatelessWidget {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             itemCount: requests.length,
             itemBuilder: (context, index) {
               final request = requests[index];
@@ -107,11 +119,14 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    final isMale = request.fromUserGender == 'male';
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border.withOpacity(0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -129,7 +144,7 @@ class _RequestCard extends StatelessWidget {
                       ),
                     );
                   },
-                  child: _buildProfileImage(request.fromUserProfileImageUrl),
+                  child: _buildProfileImage(request.fromUserProfileImageUrl, isMale),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -152,18 +167,33 @@ class _RequestCard extends StatelessWidget {
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 16,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                             const SizedBox(width: 4),
-                            Icon(Icons.chevron_right, size: 18, color: Colors.grey[600]),
+                            const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textTertiary),
                           ],
                         ),
-                        Text(
-                          '${request.genderText} · ${request.timeAgo}',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 13,
-                          ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: isMale ? AppColors.male : AppColors.female,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${request.genderText} · ${request.timeAgo}',
+                              style: const TextStyle(
+                                color: AppColors.textTertiary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -172,19 +202,20 @@ class _RequestCard extends StatelessWidget {
               ],
             ),
             if (request.message != null && request.message!.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   request.message!,
                   style: const TextStyle(
                     fontSize: 14,
-                    height: 1.4,
+                    height: 1.5,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -193,56 +224,70 @@ class _RequestCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
+                  child: GestureDetector(
+                    onTap: () {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('채팅 신청 거절'),
-                          content: const Text('정말 거절하시겠습니까?'),
+                          backgroundColor: AppColors.card,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          title: const Text('채팅 신청 거절', style: TextStyle(color: AppColors.textPrimary)),
+                          content: const Text('정말 거절하시겠습니까?', style: TextStyle(color: AppColors.textSecondary)),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('취소'),
+                              child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
                             ),
                             TextButton(
                               onPressed: () {
                                 Navigator.pop(context);
                                 onReject();
                               },
-                              child: const Text(
-                                '거절',
-                                style: TextStyle(color: Colors.red),
-                              ),
+                              child: const Text('거절', style: TextStyle(color: AppColors.error)),
                             ),
                           ],
                         ),
                       );
                     },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
-                      side: BorderSide(color: Colors.grey[300]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                    child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          '거절',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                    child: const Text('거절'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: onAccept,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C63FF),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                  child: GestureDetector(
+                    onTap: onAccept,
+                    child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          '수락',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                    child: const Text('수락'),
                   ),
                 ),
               ],
@@ -253,30 +298,42 @@ class _RequestCard extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileImage(String url) {
-    if (url.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: url,
-        imageBuilder: (context, imageProvider) => CircleAvatar(
-          radius: 28,
-          backgroundImage: imageProvider,
+  Widget _buildProfileImage(String url, bool isMale) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: isMale 
+            ? [AppColors.male.withOpacity(0.3), AppColors.male.withOpacity(0.1)]
+            : [AppColors.female.withOpacity(0.3), AppColors.female.withOpacity(0.1)],
         ),
-        placeholder: (context, url) => CircleAvatar(
-          radius: 28,
-          backgroundColor: Colors.grey[200],
-          child: const Icon(Icons.person, color: Colors.grey),
-        ),
-        errorWidget: (context, url, error) => CircleAvatar(
-          radius: 28,
-          backgroundColor: Colors.grey[200],
-          child: const Icon(Icons.person, color: Colors.grey),
-        ),
-      );
-    }
-    return CircleAvatar(
-      radius: 28,
-      backgroundColor: Colors.grey[200],
-      child: const Icon(Icons.person, size: 28, color: Colors.grey),
+      ),
+      padding: const EdgeInsets.all(2),
+      child: url.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: url,
+              imageBuilder: (context, imageProvider) => CircleAvatar(
+                radius: 26,
+                backgroundImage: imageProvider,
+              ),
+              placeholder: (context, url) => const CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.cardLight,
+                child: Icon(Icons.person, color: AppColors.textTertiary),
+              ),
+              errorWidget: (context, url, error) => const CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.cardLight,
+                child: Icon(Icons.person, color: AppColors.textTertiary),
+              ),
+            )
+          : const CircleAvatar(
+              radius: 26,
+              backgroundColor: AppColors.cardLight,
+              child: Icon(Icons.person, size: 26, color: AppColors.textTertiary),
+            ),
     );
   }
 }

@@ -8,7 +8,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class S3Service {
   static String get _accessKey => dotenv.env['AWS_ACCESS_KEY'] ?? '';
   static String get _secretKey => dotenv.env['AWS_SECRET_KEY'] ?? '';
-  static String get _bucketName => dotenv.env['S3_BUCKET_NAME'] ?? 'feeder-media1';
+  static String get _bucketName =>
+      dotenv.env['S3_BUCKET_NAME'] ?? 'feeder-media1';
   static String get _region => dotenv.env['S3_REGION'] ?? 'ap-northeast-2';
   static String get _cloudFrontUrl => dotenv.env['CLOUDFRONT_URL'] ?? '';
 
@@ -29,16 +30,14 @@ class S3Service {
 
       final payloadHash = sha256.convert(bytes).toString();
 
-      final canonicalHeaders =
-          'content-type:$contentType\n'
+      final canonicalHeaders = 'content-type:$contentType\n'
           'host:$host\n'
           'x-amz-content-sha256:$payloadHash\n'
           'x-amz-date:$amzDate\n';
 
       final signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
 
-      final canonicalRequest =
-          'PUT\n'
+      final canonicalRequest = 'PUT\n'
           '/$key\n'
           '\n'
           '$canonicalHeaders\n'
@@ -49,16 +48,14 @@ class S3Service {
       final canonicalRequestHash =
           sha256.convert(utf8.encode(canonicalRequest)).toString();
 
-      final stringToSign =
-          'AWS4-HMAC-SHA256\n'
+      final stringToSign = 'AWS4-HMAC-SHA256\n'
           '$amzDate\n'
           '$credentialScope\n'
           '$canonicalRequestHash';
 
       final signature = _calculateSignature(dateStamp, stringToSign);
 
-      final authorization =
-          'AWS4-HMAC-SHA256 '
+      final authorization = 'AWS4-HMAC-SHA256 '
           'Credential=$_accessKey/$credentialScope, '
           'SignedHeaders=$signedHeaders, '
           'Signature=$signature';
@@ -138,7 +135,8 @@ class S3Service {
     }
   }
 
-  static Future<String?> uploadProfileImage(File file, {required String userId}) async {
+  static Future<String?> uploadProfileImage(File file,
+      {required String userId}) async {
     final ext = file.path.split('.').last;
     final key = 'profile_images/$userId/${_uuid.v4()}.$ext';
     return _uploadToS3(file, key);
@@ -150,15 +148,29 @@ class S3Service {
     return _uploadToS3(file, key);
   }
 
-  static Future<String?> uploadShotImage(File file, {required String userId}) async {
+  static Future<String?> uploadShotImage(File file,
+      {required String userId}) async {
     final ext = file.path.split('.').last;
     final key = 'shots/$userId/${_uuid.v4()}.$ext';
     return _uploadToS3(file, key);
   }
 
-  static Future<String?> uploadVoice(File file, {required String chatRoomId}) async {
+  static Future<String?> uploadVoice(File file,
+      {required String chatRoomId}) async {
     final key = 'chat_voices/$chatRoomId/voice_${_uuid.v4()}.aac';
     return _uploadToS3(file, key);
   }
-}
 
+  static Future<String?> uploadChatImage(File file,
+      {required String chatRoomId}) async {
+    final ext = file.path.split('.').last;
+    final key = 'chat_images/$chatRoomId/${_uuid.v4()}.$ext';
+    return _uploadToS3(file, key);
+  }
+
+  static Future<String?> uploadShotCommentVoice(File file,
+      {required String shotId}) async {
+    final key = 'shot_comment_voices/$shotId/voice_${_uuid.v4()}.aac';
+    return _uploadToS3(file, key);
+  }
+}

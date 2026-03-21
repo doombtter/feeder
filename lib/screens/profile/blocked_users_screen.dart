@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 import '../../services/report_service.dart';
@@ -57,16 +58,21 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('차단 해제'),
-        content: Text('${user.nickname}님의 차단을 해제하시겠습니까?'),
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('차단 해제', style: TextStyle(color: AppColors.textPrimary)),
+        content: Text(
+          '${user.nickname}님의 차단을 해제하시겠습니까?',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('해제', style: TextStyle(color: Color(0xFF6C63FF))),
+            child: const Text('해제', style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
@@ -87,44 +93,62 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('차단 목록'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0.5,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF6C63FF)),
+              child: CircularProgressIndicator(color: AppColors.primary),
             )
           : _blockedUsers == null || _blockedUsers!.isEmpty
-              ? const Center(
+              ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.block, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        '차단한 사용자가 없습니다',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: const BoxDecoration(
+                          color: AppColors.card,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.block_rounded, size: 40, color: AppColors.textTertiary),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        '차단한 사용자가 없어요',
+                        style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   itemCount: _blockedUsers!.length,
                   itemBuilder: (context, index) {
                     final user = _blockedUsers![index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.border.withOpacity(0.5)),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(
@@ -134,17 +158,20 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
                         leading: _buildProfileImage(user.profileImageUrl),
                         title: Text(
                           user.nickname,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                         subtitle: Text(
                           '${user.gender == 'male' ? '남성' : '여성'} · ${user.age}세',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
                         ),
                         trailing: OutlinedButton(
                           onPressed: () => _unblock(user),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF6C63FF),
-                            side: const BorderSide(color: Color(0xFF6C63FF)),
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -168,20 +195,20 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
         ),
         placeholder: (context, url) => CircleAvatar(
           radius: 24,
-          backgroundColor: Colors.grey[200],
-          child: const Icon(Icons.person, color: Colors.grey),
+          backgroundColor: AppColors.surface,
+          child: const Icon(Icons.person, color: AppColors.textTertiary),
         ),
         errorWidget: (context, url, error) => CircleAvatar(
           radius: 24,
-          backgroundColor: Colors.grey[200],
-          child: const Icon(Icons.person, color: Colors.grey),
+          backgroundColor: AppColors.surface,
+          child: const Icon(Icons.person, color: AppColors.textTertiary),
         ),
       );
     }
     return CircleAvatar(
       radius: 24,
-      backgroundColor: Colors.grey[200],
-      child: const Icon(Icons.person, size: 24, color: Colors.grey),
+      backgroundColor: AppColors.surface,
+      child: const Icon(Icons.person, size: 24, color: AppColors.textTertiary),
     );
   }
 }

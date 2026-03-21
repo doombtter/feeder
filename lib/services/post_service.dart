@@ -83,10 +83,11 @@ class PostService {
 
   // 와드한 글
   Future<List<PostModel>> getWardedPosts(String userId) async {
-    // userId 필드로 필터링 (documentId 대신)
+    // userId 필드로 필터링
     final wardsSnapshot = await _firestore
         .collectionGroup('wards')
         .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
         .get();
 
     final postIds = <String>[];
@@ -100,20 +101,32 @@ class PostService {
 
     if (postIds.isEmpty) return [];
 
-    // 게시글 가져오기
+    // 배치로 게시글 가져오기 (whereIn은 최대 30개 제한)
     final posts = <PostModel>[];
-    for (final postId in postIds) {
-      final postDoc = await _firestore.collection('posts').doc(postId).get();
-      if (postDoc.exists) {
-        final post = PostModel.fromFirestore(postDoc);
+    final chunks = <List<String>>[];
+    
+    for (var i = 0; i < postIds.length; i += 30) {
+      chunks.add(postIds.sublist(i, i + 30 > postIds.length ? postIds.length : i + 30));
+    }
+
+    for (final chunk in chunks) {
+      final snapshot = await _firestore
+          .collection('posts')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      
+      for (final doc in snapshot.docs) {
+        final post = PostModel.fromFirestore(doc);
         if (!post.isDeleted) {
           posts.add(post);
         }
       }
     }
 
-    // 최신순 정렬
-    posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    // postIds 순서대로 정렬 (와드한 순서 = 최신순)
+    final postIdOrder = {for (var i = 0; i < postIds.length; i++) postIds[i]: i};
+    posts.sort((a, b) => (postIdOrder[a.id] ?? 0).compareTo(postIdOrder[b.id] ?? 0));
+    
     return posts;
   }
 

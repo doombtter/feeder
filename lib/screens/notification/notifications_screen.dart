@@ -21,19 +21,59 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   final _postService = PostService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
 
+  // 같은 senderId의 알림들을 그룹화
+  List<_NotificationGroup> _groupNotifications(List<NotificationModel> notifications) {
+    final groups = <String, _NotificationGroup>{};
+    
+    for (final notification in notifications) {
+      // 메시지 알림은 senderId + targetId(채팅방)로 그룹화
+      // 다른 알림은 각각 개별로 표시
+      String groupKey;
+      if (notification.type == NotificationType.newMessage && notification.senderId != null) {
+        groupKey = '${notification.senderId}_${notification.targetId}';
+      } else {
+        groupKey = notification.id; // 개별 알림
+      }
+      
+      if (groups.containsKey(groupKey)) {
+        groups[groupKey]!.notifications.add(notification);
+      } else {
+        groups[groupKey] = _NotificationGroup(
+          key: groupKey,
+          notifications: [notification],
+        );
+      }
+    }
+    
+    return groups.values.toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('알림'),
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
-        elevation: 0.5,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           TextButton(
             onPressed: () => _notificationService.markAllAsRead(_uid),
-            child: const Text('모두 읽음'),
+            child: const Text('모두 읽음', style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
@@ -41,29 +81,56 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         stream: _notificationService.getNotificationsStream(_uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const AppLoading();
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            );
           }
 
           final notifications = snapshot.data ?? [];
 
           if (notifications.isEmpty) {
-            return const AppEmptyState(
-              icon: Icons.notifications_none,
-              title: '알림이 없어요',
-              subtitle: '새로운 소식이 오면 알려드릴게요',
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: const BoxDecoration(
+                      color: AppColors.card,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.notifications_none_rounded, size: 40, color: AppColors.textTertiary),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '알림이 없어요',
+                    style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '새로운 소식이 오면 알려드릴게요',
+                    style: TextStyle(fontSize: 14, color: AppColors.textTertiary),
+                  ),
+                ],
+              ),
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: notifications.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+          final groups = _groupNotifications(notifications);
+
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            itemCount: groups.length,
             itemBuilder: (context, index) {
-              final notification = notifications[index];
-              return _NotificationItem(
-                notification: notification,
-                onTap: () => _handleNotificationTap(notification),
-                onDelete: () => _notificationService.deleteNotification(notification.id),
+              final group = groups[index];
+              return _NotificationGroupItem(
+                group: group,
+                onTap: () => _handleNotificationTap(group.latestNotification),
+                onDelete: () {
+                  for (final n in group.notifications) {
+                    _notificationService.deleteNotification(n.id);
+                  }
+                },
               );
             },
           );
@@ -73,7 +140,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _handleNotificationTap(NotificationModel notification) async {
-    // 읽음 처리
     if (!notification.isRead) {
       await _notificationService.markAsRead(notification.id);
     }
@@ -122,114 +188,204 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-class _NotificationItem extends StatelessWidget {
-  final NotificationModel notification;
+class _NotificationGroup {
+  final String key;
+  final List<NotificationModel> notifications;
+  
+  _NotificationGroup({required this.key, required this.notifications});
+  
+  NotificationModel get latestNotification => notifications.first;
+  int get count => notifications.length;
+  bool get hasUnread => notifications.any((n) => !n.isRead);
+}
+
+class _NotificationGroupItem extends StatelessWidget {
+  final _NotificationGroup group;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
-  const _NotificationItem({
-    required this.notification,
+  const _NotificationGroupItem({
+    required this.group,
     required this.onTap,
     required this.onDelete,
   });
 
-  IconData _getIcon() {
-    switch (notification.type) {
+  IconData _getIcon(NotificationType type) {
+    switch (type) {
       case NotificationType.chatRequest:
-        return Icons.person_add;
+        return Icons.person_add_rounded;
       case NotificationType.chatAccepted:
-        return Icons.check_circle;
+        return Icons.check_circle_rounded;
       case NotificationType.newMessage:
-        return Icons.chat_bubble;
+        return Icons.chat_bubble_rounded;
       case NotificationType.newComment:
-        return Icons.comment;
+        return Icons.comment_rounded;
       case NotificationType.newReply:
-        return Icons.reply;
+        return Icons.reply_rounded;
     }
   }
 
-  Color _getIconColor() {
-    switch (notification.type) {
+  Color _getIconColor(NotificationType type) {
+    switch (type) {
       case NotificationType.chatRequest:
-        return Colors.blue;
+        return AppColors.male;
       case NotificationType.chatAccepted:
-        return Colors.green;
+        return const Color(0xFF10B981);
       case NotificationType.newMessage:
         return AppColors.primary;
       case NotificationType.newComment:
-        return Colors.orange;
+        return const Color(0xFFF59E0B);
       case NotificationType.newReply:
-        return Colors.purple;
+        return const Color(0xFF8B5CF6);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final notification = group.latestNotification;
+    final hasUnread = group.hasUnread;
+    final count = group.count;
+    
     return Dismissible(
-      key: Key(notification.id),
+      key: Key(group.key),
       direction: DismissDirection.endToStart,
       onDismissed: (_) => onDelete(),
       background: Container(
-        color: Colors.red,
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: AppColors.error,
+          borderRadius: BorderRadius.circular(14),
+        ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white),
+        child: const Icon(Icons.delete_rounded, color: Colors.white),
       ),
-      child: ListTile(
-        tileColor: notification.isRead ? Colors.white : AppColors.primary.withOpacity(0.05),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: _getIconColor().withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            _getIcon(),
-            color: _getIconColor(),
-            size: 22,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: hasUnread ? AppColors.primary.withOpacity(0.08) : AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasUnread ? AppColors.primary.withOpacity(0.3) : AppColors.border.withOpacity(0.5),
           ),
         ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                notification.title,
-                style: TextStyle(
-                  fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
-                  fontSize: 15,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                // 아이콘
+                Stack(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _getIconColor(notification.type).withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _getIcon(notification.type),
+                        color: _getIconColor(notification.type),
+                        size: 22,
+                      ),
+                    ),
+                    // 그룹 카운트 배지
+                    if (count > 1)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            count > 99 ? '99+' : '$count',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-            ),
-            Text(
-              notification.timeAgo,
-              style: AppTextStyles.caption,
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              if (notification.senderGender != null) ...[
-                GenderBadge(gender: notification.senderGender!, size: 14),
-                const SizedBox(width: 6),
-              ],
-              Expanded(
-                child: Text(
-                  notification.body,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
+                const SizedBox(width: 14),
+                // 내용
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              count > 1 
+                                ? '${notification.title} 외 ${count - 1}개'
+                                : notification.title,
+                              style: TextStyle(
+                                fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
+                                fontSize: 15,
+                                color: AppColors.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            notification.timeAgo,
+                            style: const TextStyle(
+                              color: AppColors.textTertiary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (notification.senderGender != null) ...[
+                            GenderBadge(gender: notification.senderGender!, size: 14),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Text(
+                              notification.body,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                // 읽지 않음 표시
+                if (hasUnread) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
-        onTap: onTap,
       ),
     );
   }

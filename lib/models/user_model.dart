@@ -20,6 +20,16 @@ class UserModel {
   final List<String> blockedUsers;  // 차단한 유저 목록
   final bool isPremium;
   final DateTime? premiumExpiresAt;
+  // 정지 관련
+  final bool isSuspended;
+  final DateTime? suspensionExpiresAt;
+  final String? suspensionReason;
+  // 일일 무료 채팅
+  final int dailyFreeChats;  // 오늘 남은 무료 채팅 횟수
+  final DateTime? dailyFreeChatsResetAt;  // 무료 채팅 리셋 날짜
+  // 보상 수령 여부
+  final bool hasClaimedRatingReward;  // 앱 평점 보상 수령 여부
+  final bool hasClaimedPolicyReward;  // 앱 정책 확인 보상 수령 여부
 
   UserModel({
     required this.uid,
@@ -41,6 +51,13 @@ class UserModel {
     this.blockedUsers = const [],
     this.isPremium = false,
     this.premiumExpiresAt,
+    this.isSuspended = false,
+    this.suspensionExpiresAt,
+    this.suspensionReason,
+    this.dailyFreeChats = 1,
+    this.dailyFreeChatsResetAt,
+    this.hasClaimedRatingReward = false,
+    this.hasClaimedPolicyReward = false,
   });
 
   // 나이 계산
@@ -66,6 +83,21 @@ class UserModel {
     if (nicknameChangedAt == null) return 0;
     final daysSinceChange = DateTime.now().difference(nicknameChangedAt!).inDays;
     return 30 - daysSinceChange;
+  }
+
+  // 오늘 사용 가능한 무료 채팅 횟수 (리셋 체크 포함)
+  int get availableDailyFreeChats {
+    if (dailyFreeChatsResetAt == null) return 1;  // 처음이면 1회 제공
+    
+    final now = DateTime.now();
+    final resetDate = DateTime(dailyFreeChatsResetAt!.year, dailyFreeChatsResetAt!.month, dailyFreeChatsResetAt!.day);
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // 날짜가 바뀌었으면 리셋 (프리미엄은 2회, 일반은 1회)
+    if (today.isAfter(resetDate)) {
+      return isPremium ? 2 : 1;
+    }
+    return dailyFreeChats;
   }
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -99,6 +131,13 @@ class UserModel {
       blockedUsers: List<String>.from(data['blockedUsers'] ?? []),
       isPremium: data['isPremium'] ?? false,
       premiumExpiresAt: (data['premiumExpiresAt'] as Timestamp?)?.toDate(),
+      isSuspended: data['isSuspended'] ?? false,
+      suspensionExpiresAt: (data['suspensionExpiresAt'] as Timestamp?)?.toDate(),
+      suspensionReason: data['suspensionReason'],
+      dailyFreeChats: data['dailyFreeChats'] ?? 1,
+      dailyFreeChatsResetAt: (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate(),
+      hasClaimedRatingReward: data['hasClaimedRatingReward'] ?? false,
+      hasClaimedPolicyReward: data['hasClaimedPolicyReward'] ?? false,
     );
   }
 
@@ -122,6 +161,13 @@ class UserModel {
       'blockedUsers': blockedUsers,
       'isPremium': isPremium,
       'premiumExpiresAt': premiumExpiresAt != null ? Timestamp.fromDate(premiumExpiresAt!) : null,
+      'isSuspended': isSuspended,
+      'suspensionExpiresAt': suspensionExpiresAt != null ? Timestamp.fromDate(suspensionExpiresAt!) : null,
+      'suspensionReason': suspensionReason,
+      'dailyFreeChats': dailyFreeChats,
+      'dailyFreeChatsResetAt': dailyFreeChatsResetAt != null ? Timestamp.fromDate(dailyFreeChatsResetAt!) : null,
+      'hasClaimedRatingReward': hasClaimedRatingReward,
+      'hasClaimedPolicyReward': hasClaimedPolicyReward,
     };
   }
 

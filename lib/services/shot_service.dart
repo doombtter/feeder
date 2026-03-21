@@ -201,6 +201,8 @@ class ShotService {
                 'authorId': d['authorId'] ?? '',
                 'authorGender': d['authorGender'] ?? '',
                 'content': d['content'] ?? '',
+                'voiceUrl': d['voiceUrl'],
+                'voiceDuration': d['voiceDuration'],
                 'createdAt':
                     (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
               };
@@ -213,6 +215,8 @@ class ShotService {
     required String authorId,
     required String authorGender,
     required String content,
+    String? voiceUrl,
+    int? voiceDuration,
   }) async {
     final batch = _firestore.batch();
 
@@ -223,6 +227,8 @@ class ShotService {
       'authorId': authorId,
       'authorGender': authorGender,
       'content': content,
+      'voiceUrl': voiceUrl,
+      'voiceDuration': voiceDuration,
       'isDeleted': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
