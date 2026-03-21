@@ -28,6 +28,8 @@ dependencies:
   google_mobile_ads: ^7.0.0
   firebase_analytics: ^11.3.6
   url_launcher: ^6.2.1
+  video_player: ^2.8.2
+  video_compress: ^3.1.2
 
 dev_dependencies:
   flutter_test:

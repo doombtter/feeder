@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum MessageType { text, image, voice }
+enum MessageType { text, image, voice, video }
 
 class MessageModel {
   final String id;
@@ -8,7 +8,9 @@ class MessageModel {
   final String content;
   final String? imageUrl;
   final String? voiceUrl;
+  final String? videoUrl;
   final int? voiceDuration; // 음성 메시지 길이 (초)
+  final int? videoDuration; // 동영상 길이 (초)
   final MessageType type;
   final bool isRead;
   final DateTime createdAt;
@@ -20,7 +22,9 @@ class MessageModel {
     required this.content,
     this.imageUrl,
     this.voiceUrl,
+    this.videoUrl,
     this.voiceDuration,
+    this.videoDuration,
     this.type = MessageType.text,
     this.isRead = false,
     required this.createdAt,
@@ -35,6 +39,8 @@ class MessageModel {
       messageType = MessageType.voice;
     } else if (data['type'] == 'image') {
       messageType = MessageType.image;
+    } else if (data['type'] == 'video') {
+      messageType = MessageType.video;
     }
     
     return MessageModel(
@@ -43,7 +49,9 @@ class MessageModel {
       content: data['content'] ?? '',
       imageUrl: data['imageUrl'],
       voiceUrl: data['voiceUrl'],
+      videoUrl: data['videoUrl'],
       voiceDuration: data['voiceDuration'],
+      videoDuration: data['videoDuration'],
       type: messageType,
       isRead: data['isRead'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -57,7 +65,9 @@ class MessageModel {
       'content': content,
       'imageUrl': imageUrl,
       'voiceUrl': voiceUrl,
+      'videoUrl': videoUrl,
       'voiceDuration': voiceDuration,
+      'videoDuration': videoDuration,
       'type': type.name,
       'isRead': isRead,
       'createdAt': Timestamp.fromDate(createdAt),

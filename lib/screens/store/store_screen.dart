@@ -499,7 +499,7 @@ class _StoreScreenState extends State<StoreScreen>
                 color: iconColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: iconColor, size: 26),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -519,24 +519,25 @@ class _StoreScreenState extends State<StoreScreen>
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isClaimed ? AppColors.textTertiary : AppColors.textSecondary,
+                      color: isClaimed ? AppColors.textTertiary.withOpacity(0.7) : AppColors.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: isClaimed ? AppColors.surface : AppColors.primary,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: isClaimed
-                  ? const Row(
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check, color: AppColors.textTertiary, size: 16),
-                        SizedBox(width: 4),
-                        Text(
+                        Icon(Icons.check_circle, size: 16, color: AppColors.textTertiary),
+                        const SizedBox(width: 4),
+                        const Text(
                           '완료',
                           style: TextStyle(
                             color: AppColors.textTertiary,
@@ -671,9 +672,24 @@ class _StoreScreenState extends State<StoreScreen>
           ),
           const SizedBox(height: 12),
 
+          // 기존 혜택
           _buildBenefitItem(Icons.chat_bubble_rounded, '일일 보너스 채팅 +1회', '매일 무료 채팅 2회 제공'),
           _buildBenefitItem(Icons.people_rounded, '접속 유저 성별 필터', '접속 중인 사람들을 성별로 필터링'),
           _buildBenefitItem(Icons.block_rounded, '광고 제거', '모든 광고 없이 쾌적하게'),
+          
+          // 동영상 혜택 (NEW)
+          _buildBenefitItem(
+            Icons.videocam_rounded, 
+            '채팅 동영상 전송 (일 5회)', 
+            '최대 3분 동영상을 채팅에서 전송',
+            isNew: true,
+          ),
+          _buildBenefitItem(
+            Icons.card_giftcard_rounded, 
+            '상대방에게 동영상 권한 부여', 
+            '나와 채팅하는 상대도 동영상 전송 가능',
+            isNew: true,
+          ),
 
           const SizedBox(height: 24),
 
@@ -691,7 +707,7 @@ class _StoreScreenState extends State<StoreScreen>
 
             _buildSubscriptionCard(
               title: '월간 구독',
-              price: _purchaseService.getPrice(ProductIds.premiumMonthly) ?? '₩4,900',
+              price: _purchaseService.getPrice(ProductIds.premiumMonthly) ?? '₩7,900',
               period: '/월',
               isPopular: false,
               onPurchase: () {
@@ -711,10 +727,10 @@ class _StoreScreenState extends State<StoreScreen>
 
             _buildSubscriptionCard(
               title: '연간 구독',
-              price: _purchaseService.getPrice(ProductIds.premiumYearly) ?? '₩39,000',
+              price: _purchaseService.getPrice(ProductIds.premiumYearly) ?? '₩69,000',
               period: '/년',
               isPopular: true,
-              discount: '33% 할인',
+              discount: '약 27% 할인',  // (7,900 * 12 - 69,000) / (7,900 * 12) = 27%
               onPurchase: () {
                 try {
                   final product = _purchaseService.products.firstWhere(
@@ -754,11 +770,11 @@ class _StoreScreenState extends State<StoreScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildInfoRow('구독은 자동으로 갱신됩니다'),
+                _buildInfoRow('구독은 자동으로 갱신돼요'),
                 const SizedBox(height: 8),
-                _buildInfoRow('언제든지 설정에서 해지할 수 있어요'),
+                _buildInfoRow('언제든 구독을 취소할 수 있어요'),
                 const SizedBox(height: 8),
-                _buildInfoRow('갱신일 24시간 전에 해지해야 다음 결제를 막을 수 있어요'),
+                _buildInfoRow('취소하면 다음 결제일부터 적용돼요'),
               ],
             ),
           ),
@@ -767,29 +783,16 @@ class _StoreScreenState extends State<StoreScreen>
     );
   }
 
-  Widget _buildInfoRow(String text) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('•  ', style: TextStyle(color: AppColors.textTertiary)),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 13, color: AppColors.textTertiary),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBenefitItem(IconData icon, String title, String subtitle) {
+  Widget _buildBenefitItem(IconData icon, String title, String description, {bool isNew = false}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(
+          color: isNew ? AppColors.primary.withOpacity(0.5) : AppColors.border.withOpacity(0.5),
+        ),
       ),
       child: Row(
         children: [
@@ -797,36 +800,55 @@ class _StoreScreenState extends State<StoreScreen>
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: isNew ? AppColors.primary.withOpacity(0.15) : const Color(0xFFFFD700).withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppColors.primary, size: 22),
+            child: Icon(icon, color: isNew ? AppColors.primary : const Color(0xFFFFD700), size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (isNew) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'NEW',
+                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  subtitle,
+                  description,
                   style: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 13,
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 22),
         ],
       ),
     );
@@ -840,102 +862,115 @@ class _StoreScreenState extends State<StoreScreen>
     String? discount,
     required VoidCallback onPurchase,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isPopular ? AppColors.primary : AppColors.border.withOpacity(0.5),
-          width: isPopular ? 2 : 1,
+    return GestureDetector(
+      onTap: onPurchase,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isPopular ? AppColors.primary.withOpacity(0.1) : AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isPopular ? AppColors.primary : AppColors.border.withOpacity(0.5),
+            width: isPopular ? 2 : 1,
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: AppColors.textPrimary,
+                          color: isPopular ? AppColors.primary : AppColors.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            price,
-                            style: const TextStyle(
-                              fontSize: 22,
+                      if (isPopular) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            '추천',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
                             ),
                           ),
-                          Text(
-                            period,
-                            style: const TextStyle(
-                              color: AppColors.textTertiary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ],
                   ),
-                ),
-                GestureDetector(
-                  onTap: onPurchase,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isPopular ? AppColors.primary : AppColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '구독',
-                      style: TextStyle(
-                        color: isPopular ? Colors.white : AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
+                  if (discount != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        discount,
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
+                    ),
+                ],
+              ),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  price,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: isPopular ? AppColors.primary : AppColors.textPrimary,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2, left: 2),
+                  child: Text(
+                    period,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-          if (discount != null)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: const BoxDecoration(
-                  color: AppColors.error,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(14),
-                    bottomLeft: Radius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  discount,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('•', style: TextStyle(color: AppColors.textTertiary)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -950,97 +985,95 @@ class _PointProductCard extends StatelessWidget {
     required this.product,
     required this.price,
     required this.onPurchase,
-    this.isStoreAvailable = true,
+    required this.isStoreAvailable,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border.withOpacity(0.5)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFD700).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.diamond_rounded, color: Color(0xFFFFD700), size: 26),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFD700).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        '${product.points}P',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (product.bonusPoints > 0) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.error,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '+${product.bonusPoints}P',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (product.bonusPoints > 0)
+            child: const Icon(Icons.diamond_rounded, color: Color(0xFFFFD700), size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
                     Text(
-                      '총 ${product.totalPoints}P',
+                      '${product.points}P',
                       style: const TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: AppColors.textPrimary,
                       ),
                     ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: onPurchase,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(10),
+                    if (product.bonusPoints > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '+${product.bonusPoints}P',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                child: Text(
-                  price ?? '로딩중',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                if (product.bonusPoints > 0)
+                  Text(
+                    '총 ${product.totalPoints}P',
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 12,
+                    ),
                   ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onPurchase,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                price ?? '로딩중',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1131,6 +1164,11 @@ class _PolicyRewardScreen extends StatelessWidget {
               icon: Icons.link_off_rounded,
               title: '링크 및 광고 제한',
               content: '외부 링크, 연락처 공유, 광고성 게시물이 금지됩니다.',
+            ),
+            _buildPolicyItem(
+              icon: Icons.videocam_off_rounded,
+              title: '동영상 정책',
+              content: '채팅 동영상은 7일 후 자동 삭제되며, 부적절한 콘텐츠는 제재 대상입니다.',
             ),
 
             const SizedBox(height: 24),

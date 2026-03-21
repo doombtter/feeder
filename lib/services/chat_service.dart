@@ -290,7 +290,9 @@ class ChatService {
     required String content,
     String? imageUrl,
     String? voiceUrl,
+    String? videoUrl,
     int? voiceDuration,
+    int? videoDuration,
     String type = 'text',
   }) async {
     // 채팅방 정보 확인
@@ -319,7 +321,9 @@ class ChatService {
       'content': content,
       'imageUrl': imageUrl,
       'voiceUrl': voiceUrl,
+      'videoUrl': videoUrl,
       'voiceDuration': voiceDuration,
+      'videoDuration': videoDuration,
       'type': type,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
@@ -333,6 +337,8 @@ class ChatService {
       lastMessageText = '🎤 음성 메시지';
     } else if (type == 'image') {
       lastMessageText = '📷 사진';
+    } else if (type == 'video') {
+      lastMessageText = '🎬 동영상';
     }
     batch.update(chatRoomRef, {
       'lastMessage': lastMessageText,

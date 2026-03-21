@@ -40,8 +40,8 @@ class ProductIds {
     points300: '₩3,300',
     points500: '₩5,500',
     points1000: '₩11,000',
-    premiumMonthly: '₩4,900',
-    premiumYearly: '₩49,000',
+    premiumMonthly: '₩7,900',   // 동영상 기능 추가로 인상
+    premiumYearly: '₩69,000',   // 약 2개월 무료
   };
 }
 

@@ -22,6 +22,13 @@ class AppConstants {
   static const int maxVoiceDurationPost = 60;
   static const int maxVoiceDurationComment = 30;
   static const int maxVoiceDurationShot = 15;
+  
+  // 동영상 제한
+  static const int maxVideoDurationChat = 180;    // 3분
+  static const int maxVideoSizeMB = 100;          // 100MB
+  static const int premiumVideoDailyLimit = 5;    // 프리미엄 일일 5회
+  static const int grantedVideoDailyLimit = 3;    // 부여 권한 일일 3회
+  static const int videoRetentionDays = 7;        // 7일 후 삭제
 
   // 페이지네이션
   static const int feedPageSize = 15;
