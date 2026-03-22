@@ -13,8 +13,10 @@ import '../../services/shot_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
 import '../../core/widgets/ad_widgets.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../common/report_dialog.dart';
 import '../chat/chat_request_dialog.dart';
+import 'shot_likers_screen.dart';
 
 class ShotsScreen extends StatefulWidget {
   const ShotsScreen({super.key});
@@ -29,7 +31,8 @@ class ShotsScreenState extends State<ShotsScreen>
   final _userService = UserService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   late TabController _tabController;
-  bool _isPremium = false;
+  MembershipTier _membershipTier = MembershipTier.free;
+  bool get _isPremium => _membershipTier != MembershipTier.free;
 
   // ── 둘러보기 탭
   final _pageController = PageController();
@@ -52,13 +55,17 @@ class ShotsScreenState extends State<ShotsScreen>
       }
     });
     _loadShots();
-    _loadPremiumStatus();
+    _loadMembershipTier();
   }
 
-  Future<void> _loadPremiumStatus() async {
+  Future<void> _loadMembershipTier() async {
     final user = await _userService.getUser(_uid);
     if (mounted && user != null) {
-      setState(() => _isPremium = user.isPremium);
+      setState(() {
+        _membershipTier = user.isMax 
+            ? MembershipTier.max 
+            : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
+      });
     }
   }
 
@@ -324,6 +331,56 @@ class ShotsScreenState extends State<ShotsScreen>
                   child: Text(
                     shot.remainingTimeText,
                     style: const TextStyle(color: Colors.white, fontSize: 10),
+                  ),
+                ),
+              ),
+              // 좋아요 수 + MAX 조회 버튼
+              Positioned(
+                top: 4,
+                left: 4,
+                child: GestureDetector(
+                  onTap: MembershipBenefits.canViewShotLikers(_membershipTier)
+                      ? () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ShotLikersScreen(
+                                shotId: shot.id,
+                                shotThumbnailUrl: shot.imageUrl,
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: MembershipBenefits.canViewShotLikers(_membershipTier)
+                          ? MembershipTier.max.color.withOpacity(0.9)
+                          : Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.favorite,
+                          color: Colors.white,
+                          size: 10,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${shot.likeCount}',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 10),
+                        ),
+                        if (MembershipBenefits.canViewShotLikers(_membershipTier)) ...[
+                          const SizedBox(width: 2),
+                          const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 8),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ),

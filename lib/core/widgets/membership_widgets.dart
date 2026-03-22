@@ -242,6 +242,11 @@ class MembershipBenefits {
     return tier == MembershipTier.max;
   }
 
+  // 글 작성자 프로필 조회 가능 (MAX 전용)
+  static bool canViewAuthorProfile(MembershipTier tier) {
+    return tier == MembershipTier.max;
+  }
+
   // 일일 프로필 조회 횟수 (MAX 전용)
   static int getDailyProfileViews(MembershipTier tier) {
     switch (tier) {
@@ -250,7 +255,7 @@ class MembershipBenefits {
       case MembershipTier.premium:
         return 0;
       case MembershipTier.max:
-        return 2;  // 일 2회
+        return 10;  // 일 10회
     }
   }
 }

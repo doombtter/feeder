@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/video_quota_model.dart';
 import '../core/widgets/membership_widgets.dart';
 
@@ -46,12 +47,14 @@ class VideoService {
   /// [file] 동영상 파일
   /// [chatRoomId] 채팅방 ID
   /// [duration] 동영상 길이 (초)
+  /// [onProgress] 업로드 진행률 콜백 (0.0 ~ 1.0)
   /// 
   /// 반환: 업로드된 동영상 URL, 실패 시 null
   Future<String?> uploadChatVideo({
     required File file,
     required String chatRoomId,
     required int duration,
+    void Function(double progress)? onProgress,
   }) async {
     // 길이 체크
     if (duration > VideoQuotaConstants.maxVideoDurationSec) {
@@ -69,14 +72,20 @@ class VideoService {
     final ext = file.path.split('.').last.toLowerCase();
     final key = 'chat_videos/$chatRoomId/${_uuid.v4()}.$ext';
     
-    return _uploadToR2(file, key);
+    return _uploadToR2(file, key, onProgress: onProgress);
   }
 
   /// R2에 파일 업로드 (AWS Signature V4 호환)
-  Future<String?> _uploadToR2(File file, String key) async {
+  /// [onProgress] 업로드 진행률 콜백 (0.0 ~ 1.0)
+  Future<String?> _uploadToR2(
+    File file, 
+    String key, {
+    void Function(double progress)? onProgress,
+  }) async {
     try {
       final bytes = await file.readAsBytes();
       final contentType = _getContentType(key);
+      final totalBytes = bytes.length;
 
       final now = DateTime.now().toUtc();
       final dateStamp = _formatDateStamp(now);
@@ -125,13 +134,25 @@ class VideoService {
       request.headers.set('x-amz-date', amzDate);
       request.headers.set('x-amz-content-sha256', payloadHash);
       request.headers.set('Authorization', authorization);
-      request.headers.set('Content-Length', bytes.length.toString());
+      request.headers.set('Content-Length', totalBytes.toString());
 
-      request.add(bytes);
+      // 청크 단위로 업로드하며 진행률 콜백 호출
+      const chunkSize = 64 * 1024; // 64KB
+      int uploadedBytes = 0;
+      
+      for (int i = 0; i < bytes.length; i += chunkSize) {
+        final end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
+        final chunk = bytes.sublist(i, end);
+        request.add(chunk);
+        uploadedBytes += chunk.length;
+        
+        onProgress?.call(uploadedBytes / totalBytes);
+      }
 
       final response = await request.close();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        onProgress?.call(1.0);
         // 퍼블릭 URL 반환
         return '$_publicUrl/$key';
       } else {
@@ -344,6 +365,121 @@ class VideoService {
         return 'video/3gpp';
       default:
         return 'video/mp4';
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // 동영상 캐싱
+  // ══════════════════════════════════════════════════════════════
+
+  /// 캐싱된 동영상 파일 경로 반환
+  /// 캐시가 없으면 다운로드 후 캐시에 저장
+  Future<File?> getCachedVideo(String videoUrl) async {
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final cacheKey = _generateCacheKey(videoUrl);
+      final cachedFile = File('${cacheDir.path}/video_cache/$cacheKey.mp4');
+      
+      // 캐시 파일이 존재하면 반환
+      if (await cachedFile.exists()) {
+        debugPrint('비디오 캐시 히트: $cacheKey');
+        return cachedFile;
+      }
+      
+      // 캐시 폴더 생성
+      final cacheFolder = Directory('${cacheDir.path}/video_cache');
+      if (!await cacheFolder.exists()) {
+        await cacheFolder.create(recursive: true);
+      }
+      
+      // 비디오 다운로드
+      debugPrint('비디오 다운로드 시작: $videoUrl');
+      final response = await HttpClient().getUrl(Uri.parse(videoUrl));
+      final httpResponse = await response.close();
+      
+      if (httpResponse.statusCode == 200) {
+        final bytes = await consolidateHttpClientResponseBytes(httpResponse);
+        await cachedFile.writeAsBytes(bytes);
+        debugPrint('비디오 캐시 저장 완료: $cacheKey');
+        return cachedFile;
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('비디오 캐싱 에러: $e');
+      return null;
+    }
+  }
+
+  /// URL에서 캐시 키 생성
+  String _generateCacheKey(String url) {
+    final bytes = utf8.encode(url);
+    final digest = md5.convert(bytes);
+    return digest.toString();
+  }
+
+  /// 캐시 정리 (오래된 파일 삭제)
+  Future<void> clearOldCache({int maxAgeDays = 7}) async {
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final cacheFolder = Directory('${cacheDir.path}/video_cache');
+      
+      if (!await cacheFolder.exists()) return;
+      
+      final now = DateTime.now();
+      final files = await cacheFolder.list().toList();
+      
+      for (final file in files) {
+        if (file is File) {
+          final stat = await file.stat();
+          final age = now.difference(stat.modified).inDays;
+          
+          if (age > maxAgeDays) {
+            await file.delete();
+            debugPrint('오래된 캐시 삭제: ${file.path}');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('캐시 정리 에러: $e');
+    }
+  }
+
+  /// 전체 캐시 크기 (MB)
+  Future<double> getCacheSize() async {
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final cacheFolder = Directory('${cacheDir.path}/video_cache');
+      
+      if (!await cacheFolder.exists()) return 0;
+      
+      int totalBytes = 0;
+      final files = await cacheFolder.list().toList();
+      
+      for (final file in files) {
+        if (file is File) {
+          totalBytes += await file.length();
+        }
+      }
+      
+      return totalBytes / (1024 * 1024);
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /// 전체 캐시 삭제
+  Future<void> clearAllCache() async {
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final cacheFolder = Directory('${cacheDir.path}/video_cache');
+      
+      if (await cacheFolder.exists()) {
+        await cacheFolder.delete(recursive: true);
+        debugPrint('비디오 캐시 전체 삭제 완료');
+      }
+    } catch (e) {
+      debugPrint('캐시 삭제 에러: $e');
     }
   }
 }

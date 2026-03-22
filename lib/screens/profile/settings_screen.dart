@@ -3,7 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../../services/suspension_service.dart';
+import '../../services/user_service.dart';
 import 'blocked_users_screen.dart';
 import 'dev_menu_screen.dart';
 
@@ -18,9 +20,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   final _firestore = FirebaseFirestore.instance;
   final _suspensionService = SuspensionService();
+  final _userService = UserService();
+
+  // MAX 뱃지 관련
+  bool _isMax = false;
+  bool _showMaxBadge = true;
 
   int _versionTapCount = 0;
   DateTime? _lastVersionTap;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final user = await _userService.getUser(_uid);
+    if (mounted && user != null) {
+      setState(() {
+        _isMax = user.isMax;
+        _showMaxBadge = user.showMaxBadge;
+      });
+    }
+  }
+
+  Future<void> _toggleMaxBadge(bool value) async {
+    setState(() => _showMaxBadge = value);
+    
+    await _firestore.collection('users').doc(_uid).update({
+      'showMaxBadge': value,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(value ? 'MAX 뱃지가 표시됩니다' : 'MAX 뱃지가 숨겨집니다'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   void _onVersionTap() {
     final now = DateTime.now();
 
@@ -140,6 +182,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _buildSettingsCard(
             children: [
+              // MAX 뱃지 ON/OFF (MAX 유저만 표시)
+              if (_isMax) ...[
+                _buildSwitchItem(
+                  icon: Icons.workspace_premium_rounded,
+                  iconColor: MembershipTier.max.color,
+                  title: 'MAX 뱃지 표시',
+                  subtitle: '다른 사람들에게 MAX 뱃지 표시',
+                  value: _showMaxBadge,
+                  onChanged: _toggleMaxBadge,
+                ),
+                _buildDivider(),
+              ],
               _buildNavItem(
                 icon: Icons.block_rounded,
                 title: '차단 목록',
@@ -367,6 +421,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
               fontSize: 14,
               color: AppColors.textTertiary,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    Color? iconColor,
+  }) {
+    final color = iconColor ?? AppColors.primary;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primary,
           ),
         ],
       ),
@@ -743,7 +853,9 @@ class _NotificationSettingsScreenState
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    Color? iconColor,
   }) {
+    final color = iconColor ?? AppColors.primary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -752,10 +864,10 @@ class _NotificationSettingsScreenState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: AppColors.primary, size: 18),
+            child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(

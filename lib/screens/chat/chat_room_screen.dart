@@ -2,15 +2,16 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_compress/video_compress.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../../models/chat_room_model.dart';
 import '../../models/message_model.dart';
 import '../../models/report_model.dart';
@@ -19,6 +20,7 @@ import '../../services/chat_service.dart';
 import '../../services/report_service.dart';
 import '../../services/s3_service.dart';
 import '../../services/video_service.dart';
+import '../../services/user_service.dart';
 import '../profile/user_profile_screen.dart';
 import '../common/report_dialog.dart';
 
@@ -36,9 +38,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _chatService = ChatService();
   final _reportService = ReportService();
   final _videoService = VideoService();
+  final _userService = UserService();
   final _scrollController = ScrollController();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
-  final _firestore = FirebaseFirestore.instance;
   
   // ValueNotifier로 setState 최소화 (프레임 드롭 방지)
   final ValueNotifier<bool> _isSendingNotifier = ValueNotifier(false);
@@ -55,37 +57,46 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   List<MessageModel> _cachedMessages = [];
   
-  // 동영상 권한 관련
-  VideoPermissionResult? _videoPermission;
+  // 동영상 관련
+  String? _otherUserId;
   bool _isOtherPremium = false;
-  String _otherUserId = '';
+  MembershipTier _myMembershipTier = MembershipTier.free;
 
   @override
   void initState() {
     super.initState();
     _chatService.markAsRead(widget.chatRoomId, _uid);
+    _loadMembershipInfo();
   }
 
-  Future<void> _loadVideoPermission() async {
-    if (_otherUserId.isEmpty) return;
-    
-    final permission = await _videoService.checkVideoPermission(
-      chatRoomId: widget.chatRoomId,
-      otherUserId: _otherUserId,
-      isOtherPremium: _isOtherPremium,
-    );
-    
-    if (mounted) {
-      setState(() => _videoPermission = permission);
+  Future<void> _loadMembershipInfo() async {
+    // 내 멤버십 정보
+    final myUser = await _userService.getUser(_uid);
+    if (myUser != null) {
+      _myMembershipTier = myUser.isMax 
+          ? MembershipTier.max 
+          : (myUser.isPremium ? MembershipTier.premium : MembershipTier.free);
     }
-  }
-
-  Future<void> _checkOtherUserPremium(String userId) async {
-    final doc = await _firestore.collection('users').doc(userId).get();
-    if (doc.exists) {
-      _isOtherPremium = doc.data()?['isPremium'] ?? false;
-      await _loadVideoPermission();
+    
+    // 상대방 정보 로드는 채팅방 정보에서 가져옴
+    final roomDoc = await FirebaseFirestore.instance
+        .collection('chatRooms')
+        .doc(widget.chatRoomId)
+        .get();
+    
+    if (roomDoc.exists) {
+      final participants = List<String>.from(roomDoc.data()?['participants'] ?? []);
+      _otherUserId = participants.firstWhere((id) => id != _uid, orElse: () => '');
+      
+      if (_otherUserId != null && _otherUserId!.isNotEmpty) {
+        final otherUser = await _userService.getUser(_otherUserId!);
+        if (otherUser != null) {
+          _isOtherPremium = otherUser.isPremium;
+        }
+      }
     }
+    
+    if (mounted) setState(() {});
   }
 
   Future<void> _initRecorder() async {
@@ -191,69 +202,130 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // 동영상 전송 (NEW)
-  // ══════════════════════════════════════════════════════════════
-
   Future<void> _pickAndSendVideo() async {
-    // 권한 체크
-    if (_videoPermission == null || !_videoPermission!.canSend) {
-      _showVideoPermissionDialog();
+    if (_otherUserId == null || _otherUserId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('상대방 정보를 불러오는 중입니다')),
+      );
       return;
     }
 
+    // 권한 체크
+    final permission = await _videoService.checkVideoPermission(
+      chatRoomId: widget.chatRoomId,
+      otherUserId: _otherUserId!,
+      isOtherPremium: _isOtherPremium,
+    );
+
+    if (!permission.canSend) {
+      _showVideoPermissionDialog(permission);
+      return;
+    }
+
+    // 동영상 선택
     final picker = ImagePicker();
     final pickedFile = await picker.pickVideo(
       source: ImageSource.gallery,
-      maxDuration: Duration(seconds: AppConstants.maxVideoDurationChat),
+      maxDuration: const Duration(seconds: 180),
     );
 
     if (pickedFile == null) return;
 
-    final file = File(pickedFile.path);
+    // 진행률 다이얼로그 표시
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final statusNotifier = ValueNotifier<String>('압축 준비 중...');
     
-    // 동영상 정보 확인
-    final controller = VideoPlayerController.file(file);
-    await controller.initialize();
-    final duration = controller.value.duration.inSeconds;
-    await controller.dispose();
-
-    // 길이 체크
-    if (duration > AppConstants.maxVideoDurationChat) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('동영상은 최대 ${AppConstants.maxVideoDurationChat ~/ 60}분까지만 전송 가능해요'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-      return;
-    }
-
-    // 로딩 표시
     if (mounted) {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => _VideoUploadingDialog(),
+        builder: (context) => _VideoProgressDialog(
+          progressNotifier: progressNotifier,
+          statusNotifier: statusNotifier,
+        ),
       );
     }
 
-    _isSendingNotifier.value = true;
-
     try {
-      // 동영상 압축 (720p)
-      final compressedFile = await _compressVideo(file);
+      final originalFile = File(pickedFile.path);
       
-      // R2에 업로드
+      // 원본 파일 크기 체크
+      final originalSizeMB = await originalFile.length() / (1024 * 1024);
+      debugPrint('원본 동영상 크기: ${originalSizeMB.toStringAsFixed(1)}MB');
+
+      // 압축 진행 상태 표시
+      statusNotifier.value = '동영상 압축 중...';
+      
+      // 압축 진행률 구독
+      final subscription = VideoCompress.compressProgress$.subscribe((progress) {
+        progressNotifier.value = progress / 100 * 0.5; // 압축은 전체의 50%
+      });
+
+      // 동영상 압축
+      final compressedInfo = await VideoCompress.compressVideo(
+        originalFile.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+        includeAudio: true,
+      );
+      
+      subscription.unsubscribe();
+
+      if (compressedInfo == null || compressedInfo.file == null) {
+        throw Exception('동영상 압축 실패');
+      }
+
+      final compressedFile = compressedInfo.file!;
+      final compressedSizeMB = await compressedFile.length() / (1024 * 1024);
+      debugPrint('압축 후 크기: ${compressedSizeMB.toStringAsFixed(1)}MB');
+
+      // 압축 후 크기 체크
+      if (compressedSizeMB > VideoQuotaConstants.maxVideoSizeMB) {
+        throw Exception('압축 후에도 동영상이 ${VideoQuotaConstants.maxVideoSizeMB}MB를 초과합니다');
+      }
+
+      // 썸네일 생성
+      statusNotifier.value = '썸네일 생성 중...';
+      progressNotifier.value = 0.55;
+      
+      final thumbnailFile = await VideoCompress.getFileThumbnail(
+        originalFile.path,
+        quality: 70,
+        position: -1, // 자동 (보통 첫 프레임)
+      );
+
+      // 동영상 길이 (초)
+      final duration = compressedInfo.duration != null 
+          ? (compressedInfo.duration! / 1000).round() 
+          : 0;
+
+      // 업로드 진행 표시
+      statusNotifier.value = '동영상 업로드 중...';
+
+      // 동영상 업로드 (진행률 콜백 포함)
       final videoUrl = await _videoService.uploadChatVideo(
-        file: compressedFile ?? file,
+        file: compressedFile,
         chatRoomId: widget.chatRoomId,
         duration: duration,
+        onProgress: (progress) {
+          // 업로드는 전체의 50% ~ 95%
+          progressNotifier.value = 0.5 + (progress * 0.45);
+        },
       );
 
       if (videoUrl == null) throw Exception('동영상 업로드 실패');
+
+      // 썸네일 업로드
+      statusNotifier.value = '마무리 중...';
+      progressNotifier.value = 0.95;
+      
+      String? thumbnailUrl;
+      if (thumbnailFile != null) {
+        thumbnailUrl = await S3Service.uploadChatImage(
+          thumbnailFile,
+          chatRoomId: widget.chatRoomId,
+        );
+      }
 
       // 쿼터 차감
       await _videoService.useVideoQuota(
@@ -267,88 +339,71 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         senderId: _uid,
         content: '',
         videoUrl: videoUrl,
+        videoThumbnailUrl: thumbnailUrl,
         videoDuration: duration,
         type: 'video',
       );
 
-      // 권한 새로고침
-      await _loadVideoPermission();
+      progressNotifier.value = 1.0;
 
-      // 압축 파일 삭제
-      if (compressedFile != null && compressedFile.path != file.path) {
-        await compressedFile.delete();
-      }
-    } catch (e) {
+      // 임시 파일 정리
+      await VideoCompress.deleteAllCache();
+
+      // 다이얼로그 닫기
       if (mounted) {
+        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('동영상 전송 실패: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('동영상 전송 완료 (남은 횟수: ${(permission.remainingToday ?? 1) - 1}회)'),
+            backgroundColor: AppColors.success,
+          ),
         );
       }
-    } finally {
-      // 다이얼로그 닫기
-      if (mounted) Navigator.of(context).pop();
-      _isSendingNotifier.value = false;
-    }
-  }
-
-  Future<File?> _compressVideo(File file) async {
-    try {
-      final info = await VideoCompress.compressVideo(
-        file.path,
-        quality: VideoQuality.MediumQuality,  // 720p
-        deleteOrigin: false,
-        includeAudio: true,
-      );
-      return info?.file;
     } catch (e) {
-      debugPrint('동영상 압축 실패: $e');
-      return null;
+      // 압축 캐시 정리
+      await VideoCompress.deleteAllCache();
+      
+      // 다이얼로그 닫기
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('동영상 전송 실패: $e')),
+        );
+      }
     }
   }
 
-  void _showVideoPermissionDialog() {
-    final status = _videoPermission?.status ?? VideoPermissionStatus.noPermission;
-    
-    String title;
-    String message;
-    
-    if (status == VideoPermissionStatus.quotaExceeded) {
-      title = '전송 한도 초과';
-      message = '오늘 동영상 전송 한도를 모두 사용했어요.\n내일 다시 시도해주세요!';
-    } else {
-      title = '동영상 전송 불가';
-      message = '프리미엄 회원과의 채팅에서만 동영상을 전송할 수 있어요.\n\n프리미엄 구독 시 모든 채팅에서 일 5회 전송 가능!';
-    }
-
+  void _showVideoPermissionDialog(VideoPermissionResult permission) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(color: AppColors.textPrimary)),
-        content: Text(message, style: const TextStyle(color: AppColors.textSecondary)),
-        actions: [
-          if (status == VideoPermissionStatus.noPermission)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // 상점으로 이동
-                Navigator.pushNamed(context, '/store');
-              },
-              child: const Text('프리미엄 보기'),
+        title: Row(
+          children: [
+            Icon(
+              permission.status == VideoPermissionStatus.quotaExceeded
+                  ? Icons.hourglass_empty_rounded
+                  : Icons.videocam_off_rounded,
+              color: AppColors.textSecondary,
             ),
+            const SizedBox(width: 8),
+            const Text('동영상 전송', style: TextStyle(color: AppColors.textPrimary)),
+          ],
+        ),
+        content: Text(
+          permission.message ?? '동영상을 전송할 수 없습니다',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('확인'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('확인', style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
     );
   }
-
-  // ══════════════════════════════════════════════════════════════
-  // 음성 메시지
-  // ══════════════════════════════════════════════════════════════
 
   Future<void> _startRecording() async {
     final status = await Permission.microphone.request();
@@ -527,22 +582,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
         final otherProfile = chatRoom?.getOtherProfile(_uid);
         final otherUserId = chatRoom?.participants.firstWhere((id) => id != _uid, orElse: () => '') ?? '';
-        
-        // 상대방 ID가 변경되면 프리미엄 여부 확인
-        if (otherUserId.isNotEmpty && otherUserId != _otherUserId) {
-          _otherUserId = otherUserId;
-          _checkOtherUserPremium(otherUserId);
-        }
 
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: _buildAppBar(otherProfile, otherUserId),
           body: Column(
             children: [
-              // 동영상 권한 배너
-              if (_videoPermission != null && _videoPermission!.canSend)
-                _buildVideoPermissionBanner(),
-              
               Expanded(
                 child: StreamBuilder<List<MessageModel>>(
                   stream: _chatService.getMessages(widget.chatRoomId),
@@ -605,35 +650,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  Widget _buildVideoPermissionBanner() {
-    final isPremium = _videoPermission!.status == VideoPermissionStatus.premium;
-    final remaining = _videoPermission!.remainingToday ?? 0;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.videocam_rounded, color: AppColors.primary, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              isPremium
-                  ? '동영상 전송 가능 (오늘 $remaining회 남음)'
-                  : '이 채팅에서 동영상 $remaining회 전송 가능',
-              style: const TextStyle(color: AppColors.primary, fontSize: 13),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDateDivider(DateTime date) {
     final now = DateTime.now();
     String text;
@@ -652,7 +668,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           Expanded(child: Divider(color: AppColors.border.withOpacity(0.3))),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(text, style: const TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+            child: Text(text, style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
           ),
           Expanded(child: Divider(color: AppColors.border.withOpacity(0.3))),
         ],
@@ -677,18 +693,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             Text(otherProfile?.nickname ?? '채팅'),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 20, color: AppColors.textTertiary),
-            // 프리미엄 뱃지
-            if (_isOtherPremium) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD700).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Icon(Icons.workspace_premium_rounded, size: 14, color: Color(0xFFFFD700)),
-              ),
-            ],
           ],
         ),
       ),
@@ -808,12 +812,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Widget _buildTextInputUI() {
+    // 동영상 전송 가능 여부 체크
+    final canSendVideo = _myMembershipTier != MembershipTier.free || _isOtherPremium;
+    
     return ValueListenableBuilder<bool>(
       valueListenable: _isSendingNotifier,
       builder: (context, isSending, _) {
         return Row(
           children: [
-            // 이미지 버튼
             GestureDetector(
               onTap: isSending ? null : _pickAndSendImage,
               child: Container(
@@ -823,7 +829,31 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               ),
             ),
             const SizedBox(width: 6),
-            // 음성 버튼
+            // 동영상 버튼 (프리미엄/MAX 또는 상대가 프리미엄일 때 표시)
+            if (canSendVideo) ...[
+              GestureDetector(
+                onTap: isSending ? null : _pickAndSendVideo,
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle, 
+                    color: _myMembershipTier != MembershipTier.free 
+                        ? _myMembershipTier.color.withOpacity(0.15)
+                        : AppColors.surface,
+                  ),
+                  child: Icon(
+                    Icons.videocam_rounded, 
+                    color: isSending 
+                        ? AppColors.textTertiary 
+                        : (_myMembershipTier != MembershipTier.free 
+                            ? _myMembershipTier.color 
+                            : AppColors.primary), 
+                    size: 22,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
             GestureDetector(
               onTap: isSending ? null : _startRecording,
               child: Container(
@@ -832,46 +862,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 child: Icon(Icons.mic_rounded, color: isSending ? AppColors.textTertiary : AppColors.primary, size: 22),
               ),
             ),
-            const SizedBox(width: 6),
-            // 동영상 버튼 (NEW)
-            GestureDetector(
-              onTap: isSending ? null : _pickAndSendVideo,
-              child: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.surface),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(
-                      Icons.videocam_rounded, 
-                      color: isSending 
-                          ? AppColors.textTertiary 
-                          : (_videoPermission?.canSend == true ? AppColors.primary : AppColors.textTertiary), 
-                      size: 22,
-                    ),
-                    // 남은 횟수 뱃지
-                    if (_videoPermission?.canSend == true && (_videoPermission?.remainingToday ?? 0) > 0)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '${_videoPermission!.remainingToday}',
-                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
             const SizedBox(width: 8),
-            // 텍스트 입력
             Expanded(
               child: TextField(
                 controller: _messageController,
@@ -879,7 +870,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 textAlignVertical: TextAlignVertical.center,
                 decoration: InputDecoration(
                   hintText: '메시지를 입력하세요',
-                  hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 15),
+                  hintStyle: TextStyle(color: AppColors.textHint, fontSize: 15),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
                   filled: true,
                   fillColor: AppColors.surface,
@@ -890,7 +881,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            // 전송 버튼
             GestureDetector(
               onTap: isSending ? null : _sendMessage,
               child: Container(
@@ -928,7 +918,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           },
         ),
         const SizedBox(width: 6),
-        const Text('/ 1:00', style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+        Text('/ 1:00', style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
         const Spacer(),
         GestureDetector(
           onTap: _stopRecording,
@@ -943,96 +933,84 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Widget _buildPreviewUI() {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: _cancelRecording,
-          child: Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.error.withOpacity(0.1)),
-            child: const Icon(Icons.close_rounded, color: AppColors.error, size: 22),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: _cancelRecording,
+            child: Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.error.withOpacity(0.1)),
+              child: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: _reRecord,
-          child: Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.surface),
-            child: const Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 22),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: ValueListenableBuilder<bool>(
+          const SizedBox(width: 6),
+          ValueListenableBuilder<bool>(
             valueListenable: _isPreviewPlayingNotifier,
             builder: (context, isPlaying, _) {
               return GestureDetector(
                 onTap: _togglePreviewPlay,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: AppColors.primary, size: 22),
-                      const SizedBox(width: 8),
-                      Text(_formatDuration(_recordDurationNotifier.value), style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
-                      const Spacer(),
-                      const Text('미리듣기', style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
-                    ],
-                  ),
+                  width: 40, height: 40,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
+                  child: Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 22),
                 ),
               );
             },
           ),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: _sendVoiceMessage,
-          child: Container(
-            width: 40, height: 40,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
-            child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Row(
+              children: [
+                ...List.generate(12, (i) {
+                  final heights = [6.0, 12.0, 8.0, 14.0, 10.0, 12.0, 6.0, 14.0, 10.0, 8.0, 14.0, 10.0];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Container(height: heights[i], width: 3, decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.5), borderRadius: BorderRadius.circular(2))),
+                  );
+                }),
+                const Spacer(),
+                ValueListenableBuilder<int>(
+                  valueListenable: _recordDurationNotifier,
+                  builder: (context, duration, _) {
+                    return Text(_formatDuration(duration), style: TextStyle(fontSize: 12, color: AppColors.textTertiary));
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-// 동영상 업로드 다이얼로그
-// ══════════════════════════════════════════════════════════════
-
-class _VideoUploadingDialog extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.card,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: AppColors.primary),
-            const SizedBox(height: 16),
-            const Text('동영상 전송 중...', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
-            const SizedBox(height: 8),
-            const Text('압축 및 업로드 중이에요', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          ],
-        ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: _reRecord,
+            child: Container(width: 40, height: 40, decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.surface), child: Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 20)),
+          ),
+          const SizedBox(width: 6),
+          ValueListenableBuilder<bool>(
+            valueListenable: _isSendingNotifier,
+            builder: (context, isSending, _) {
+              return GestureDetector(
+                onTap: isSending ? null : _sendVoiceMessage,
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
+                  child: isSending
+                      ? const Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 }
-
-// ══════════════════════════════════════════════════════════════
-// 메시지 버블 (동영상 추가)
-// ══════════════════════════════════════════════════════════════
 
 class _MessageBubble extends StatefulWidget {
   final MessageModel message;
@@ -1046,17 +1024,14 @@ class _MessageBubble extends StatefulWidget {
 
 class _MessageBubbleState extends State<_MessageBubble> {
   FlutterSoundPlayer? _player;
-  VideoPlayerController? _videoController;
   bool _isPlaying = false;
   double _progress = 0.0;
   Timer? _progressTimer;
-  bool _isVideoInitialized = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.message.type == MessageType.voice) _initPlayer();
-    if (widget.message.type == MessageType.video) _initVideoPlayer();
   }
 
   Future<void> _initPlayer() async {
@@ -1068,22 +1043,10 @@ class _MessageBubbleState extends State<_MessageBubble> {
     }
   }
 
-  Future<void> _initVideoPlayer() async {
-    if (widget.message.videoUrl == null) return;
-    try {
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.message.videoUrl!));
-      await _videoController!.initialize();
-      if (mounted) setState(() => _isVideoInitialized = true);
-    } catch (e) {
-      debugPrint('Video player init error: $e');
-    }
-  }
-
   @override
   void dispose() {
     _progressTimer?.cancel();
     _player?.closePlayer();
-    _videoController?.dispose();
     super.dispose();
   }
 
@@ -1122,17 +1085,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
     }
   }
 
-  void _toggleVideoPlay() {
-    if (_videoController == null || !_isVideoInitialized) return;
-
-    if (_videoController!.value.isPlaying) {
-      _videoController!.pause();
-    } else {
-      _videoController!.play();
-    }
-    setState(() => _isPlaying = _videoController!.value.isPlaying);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1142,13 +1094,13 @@ class _MessageBubbleState extends State<_MessageBubble> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (widget.isMe) ...[
-            Text(widget.message.timeText, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+            Text(widget.message.timeText, style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
             const SizedBox(width: 4),
           ],
           Flexible(child: _buildBubble()),
           if (!widget.isMe) ...[
             const SizedBox(width: 4),
-            Text(widget.message.timeText, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+            Text(widget.message.timeText, style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
           ],
         ],
       ),
@@ -1215,63 +1167,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
             placeholder: (context, url) => Container(width: 150, height: 150, color: AppColors.card, child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))),
             errorWidget: (context, url, error) => Container(width: 150, height: 150, color: AppColors.card, child: const Icon(Icons.broken_image, color: AppColors.textTertiary)),
           ),
-        ),
-      ),
-    );
-  }
-
-  // 동영상 버블 (NEW)
-  Widget _buildVideoBubble() {
-    return GestureDetector(
-      onTap: _toggleVideoPlay,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 240),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16), topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(widget.isMe ? 16 : 4), bottomRight: Radius.circular(widget.isMe ? 4 : 16),
-          ),
-          color: widget.isMe ? AppColors.primary : AppColors.cardLight,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // 동영상
-            if (_isVideoInitialized)
-              AspectRatio(
-                aspectRatio: _videoController!.value.aspectRatio,
-                child: VideoPlayer(_videoController!),
-              )
-            else
-              Container(
-                height: 180,
-                color: AppColors.surface,
-                child: const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-              ),
-
-            // 재생 버튼
-            if (_isVideoInitialized && !(_videoController?.value.isPlaying ?? false))
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
-              ),
-
-            // 길이 표시
-            Positioned(
-              right: 8,
-              bottom: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                child: Text(
-                  _formatDuration(widget.message.videoDuration ?? 0),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1351,5 +1246,467 @@ class _MessageBubbleState extends State<_MessageBubble> {
     final min = seconds ~/ 60;
     final sec = seconds % 60;
     return '$min:${sec.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildVideoBubble() {
+    final isMine = widget.isMe;
+    final duration = widget.message.videoDuration ?? 0;
+    final thumbnailUrl = widget.message.videoThumbnailUrl;
+    
+    return GestureDetector(
+      onTap: () {
+        if (widget.message.videoUrl != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => _VideoPlayerScreen(
+                videoUrl: widget.message.videoUrl!,
+              ),
+            ),
+          );
+        }
+      },
+      child: Container(
+        width: 200,
+        height: 200,
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(15),
+            topRight: const Radius.circular(15),
+            bottomLeft: Radius.circular(isMine ? 15 : 3),
+            bottomRight: Radius.circular(isMine ? 3 : 15),
+          ),
+          border: isMine ? null : Border.all(color: AppColors.border.withOpacity(0.5)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(15),
+            topRight: const Radius.circular(15),
+            bottomLeft: Radius.circular(isMine ? 15 : 3),
+            bottomRight: Radius.circular(isMine ? 3 : 15),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // 썸네일 또는 배경
+              if (thumbnailUrl != null)
+                CachedNetworkImage(
+                  imageUrl: thumbnailUrl,
+                  fit: BoxFit.cover,
+                  width: 200,
+                  height: 200,
+                  placeholder: (_, __) => Container(color: Colors.black87),
+                  errorWidget: (_, __, ___) => Container(color: Colors.black87),
+                )
+              else
+                Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.black87,
+                ),
+              
+              // 반투명 오버레이
+              Container(
+                width: 200,
+                height: 200,
+                color: Colors.black.withOpacity(0.3),
+              ),
+              
+              // 재생 버튼
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              
+              // 동영상 길이 라벨
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.videocam_rounded, color: Colors.white, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatDuration(duration),
+                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// 동영상 업로드 진행률 다이얼로그
+class _VideoProgressDialog extends StatelessWidget {
+  final ValueNotifier<double> progressNotifier;
+  final ValueNotifier<String> statusNotifier;
+
+  const _VideoProgressDialog({
+    required this.progressNotifier,
+    required this.statusNotifier,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 진행률 인디케이터
+            ValueListenableBuilder<double>(
+              valueListenable: progressNotifier,
+              builder: (context, progress, child) {
+                return Column(
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 6,
+                            backgroundColor: AppColors.border,
+                            valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                          ),
+                          Text(
+                            '${(progress * 100).toInt()}%',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 진행 바
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 6,
+                        backgroundColor: AppColors.border,
+                        valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            // 상태 텍스트
+            ValueListenableBuilder<String>(
+              valueListenable: statusNotifier,
+              builder: (context, status, child) {
+                return Text(
+                  status,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '잠시만 기다려주세요',
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 동영상 재생 화면
+class _VideoPlayerScreen extends StatefulWidget {
+  final String videoUrl;
+
+  const _VideoPlayerScreen({required this.videoUrl});
+
+  @override
+  State<_VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
+  VideoPlayerController? _controller;
+  bool _isInitialized = false;
+  bool _isLoading = true;
+  bool _showControls = true;
+  Timer? _hideControlsTimer;
+  final _videoService = VideoService();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      // 캐싱된 동영상 파일 가져오기 시도
+      final cachedFile = await _videoService.getCachedVideo(widget.videoUrl);
+      
+      if (cachedFile != null && await cachedFile.exists()) {
+        // 캐시된 파일로 재생
+        _controller = VideoPlayerController.file(cachedFile);
+        debugPrint('캐시된 동영상으로 재생');
+      } else {
+        // 네트워크에서 직접 재생
+        _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+        debugPrint('네트워크 동영상으로 재생');
+      }
+      
+      await _controller!.initialize();
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+          _isLoading = false;
+        });
+        _controller!.play();
+        _startHideControlsTimer();
+      }
+    } catch (e) {
+      debugPrint('Video player init error: $e');
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('동영상을 재생할 수 없습니다: $e')),
+        );
+      }
+    }
+  }
+
+  void _startHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _controller != null && _controller!.value.isPlaying) {
+        setState(() => _showControls = false);
+      }
+    });
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _startHideControlsTimer();
+  }
+
+  void _togglePlayPause() {
+    if (_controller == null) return;
+    
+    if (_controller!.value.isPlaying) {
+      _controller!.pause();
+      setState(() => _showControls = true);
+    } else {
+      _controller!.play();
+      _startHideControlsTimer();
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _hideControlsTimer?.cancel();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration duration) {
+    final min = duration.inMinutes;
+    final sec = duration.inSeconds % 60;
+    return '$min:${sec.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      extendBodyBehindAppBar: true,
+      body: GestureDetector(
+        onTap: _toggleControls,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 동영상
+            if (_isInitialized && _controller != null)
+              Center(
+                child: AspectRatio(
+                  aspectRatio: _controller!.value.aspectRatio,
+                  child: VideoPlayer(_controller!),
+                ),
+              )
+            else if (_isLoading)
+              const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      '동영상 로딩 중...',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              )
+            else
+              const Center(
+                child: Text(
+                  '동영상을 재생할 수 없습니다',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+
+            // 재생/일시정지 버튼
+            if (_isInitialized && _showControls && _controller != null)
+              GestureDetector(
+                onTap: _togglePlayPause,
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _controller!.value.isPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+              ),
+
+            // 하단 컨트롤
+            if (_isInitialized && _showControls && _controller != null)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    bottom: MediaQuery.of(context).padding.bottom + 16,
+                    top: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [Colors.black87, Colors.transparent],
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 프로그레스 바
+                      ValueListenableBuilder(
+                        valueListenable: _controller!,
+                        builder: (context, VideoPlayerValue value, child) {
+                          return Column(
+                            children: [
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 3,
+                                  thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 6,
+                                  ),
+                                  overlayShape: const RoundSliderOverlayShape(
+                                    overlayRadius: 12,
+                                  ),
+                                ),
+                                child: Slider(
+                                  value: value.position.inMilliseconds.toDouble(),
+                                  min: 0,
+                                  max: value.duration.inMilliseconds.toDouble(),
+                                  activeColor: AppColors.primary,
+                                  inactiveColor: Colors.white30,
+                                  onChanged: (newValue) {
+                                    _controller!.seekTo(
+                                      Duration(milliseconds: newValue.toInt()),
+                                    );
+                                  },
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      _formatDuration(value.position),
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      _formatDuration(value.duration),
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

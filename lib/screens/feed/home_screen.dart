@@ -18,11 +18,11 @@ import '../../services/notification_service.dart';
 import 'post_detail_screen.dart';
 import 'post_write_screen.dart';
 import '../profile/my_profile_screen.dart';
+import '../profile/user_profile_screen.dart';
 import '../chat/chat_list_screen.dart';
 import '../chat/chat_request_dialog.dart';
 import '../shots/shots_screen.dart';
 import '../../core/widgets/ad_widgets.dart';
-import '../../services/user_service.dart' show UserService;
 import '../../services/admob_service.dart';
 import '../common/report_dialog.dart';
 import '../notification/notifications_screen.dart';
@@ -402,14 +402,15 @@ class _HomeScreenState extends State<HomeScreen> {
       case 3:
         return const MyProfileScreen();
       default:
-        return _FeedList(key: _feedKey, isPremium: _isPremium);
+        return _FeedList(key: _feedKey, isPremium: _isPremium, membershipTier: _membershipTier);
     }
   }
 }
 
 class _FeedList extends StatefulWidget {
   final bool isPremium;
-  const _FeedList({super.key, this.isPremium = false});
+  final MembershipTier membershipTier;
+  const _FeedList({super.key, this.isPremium = false, this.membershipTier = MembershipTier.free});
 
   @override
   State<_FeedList> createState() => _FeedListState();
@@ -555,6 +556,7 @@ class _FeedListState extends State<_FeedList> {
             children: [
               _PostCard(
                 post: _posts[index],
+                membershipTier: widget.membershipTier,
                 onTap: () async {
                   await Navigator.push(
                     context,
@@ -582,11 +584,13 @@ class _PostCard extends StatefulWidget {
   final PostModel post;
   final VoidCallback onTap;
   final VoidCallback onDeleted;
+  final MembershipTier membershipTier;
 
   const _PostCard({
     required this.post,
     required this.onTap,
     required this.onDeleted,
+    required this.membershipTier,
   });
 
   @override
@@ -596,6 +600,7 @@ class _PostCard extends StatefulWidget {
 class _PostCardState extends State<_PostCard> {
   final _postService = PostService();
   final _reportService = ReportService();
+  final _userService = UserService();
   bool _isWarded = false;
   int _wardCount = 0;
 
@@ -631,6 +636,132 @@ class _PostCardState extends State<_PostCard> {
     }
   }
 
+  Future<void> _viewAuthorProfile(BuildContext context) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // MAX 유저만 프로필 조회 가능
+    if (widget.membershipTier != MembershipTier.max) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.workspace_premium_rounded, color: MembershipTier.max.color, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('MAX 멤버십 전용 기능입니다')),
+            ],
+          ),
+          action: SnackBarAction(
+            label: '업그레이드',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const StoreScreen()),
+              );
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
+    // 쿼터 체크
+    final quota = await _userService.checkProfileViewQuota(uid);
+    
+    if (!quota.canView) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('오늘 프로필 조회 횟수를 모두 사용했어요 (일 10회)'),
+          ),
+        );
+      }
+      return;
+    }
+
+    // 확인 다이얼로그
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.visibility_rounded, color: MembershipTier.max.color, size: 24),
+            const SizedBox(width: 8),
+            const Text('프로필 조회', style: TextStyle(color: AppColors.textPrimary)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '이 글 작성자의 프로필을 조회하시겠습니까?',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: MembershipTier.max.color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: MembershipTier.max.color),
+                  const SizedBox(width: 6),
+                  Text(
+                    '오늘 ${quota.remaining}회 남음',
+                    style: TextStyle(
+                      color: MembershipTier.max.color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('조회', style: TextStyle(color: MembershipTier.max.color)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // 쿼터 차감
+    final success = await _userService.useProfileViewQuota(uid);
+    if (!success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('프로필 조회에 실패했습니다')),
+        );
+      }
+      return;
+    }
+
+    // 프로필 화면으로 이동
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => UserProfileScreen(userId: widget.post.authorId),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -654,8 +785,11 @@ class _PostCardState extends State<_PostCard> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               child: Row(
                 children: [
-                  // 성별 인디케이터 (새 디자인)
-                  GenderBadge(gender: widget.post.authorGender, size: 40),
+                  // 성별 인디케이터 (MAX 유저는 탭하여 프로필 조회)
+                  GestureDetector(
+                    onTap: isAuthor ? null : () => _viewAuthorProfile(context),
+                    child: GenderBadge(gender: widget.post.authorGender, size: 40),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -663,16 +797,29 @@ class _PostCardState extends State<_PostCard> {
                       children: [
                         Row(
                           children: [
-                            Text(
-                              '익명',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
+                            // 익명 텍스트 (MAX 유저는 탭하여 프로필 조회)
+                            GestureDetector(
+                              onTap: isAuthor ? null : () => _viewAuthorProfile(context),
+                              child: Text(
+                                '익명',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 6),
                             GenderTextBadge(gender: widget.post.authorGender),
+                            // MAX 유저에게 프로필 조회 가능 힌트
+                            if (widget.membershipTier == MembershipTier.max && !isAuthor) ...[
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.visibility_rounded,
+                                size: 14,
+                                color: MembershipTier.max.color.withOpacity(0.7),
+                              ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 2),

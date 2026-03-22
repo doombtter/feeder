@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class UserService {
@@ -215,5 +216,85 @@ class UserService {
         .toList();
 
     return users;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // MAX 전용: 프로필 조회 쿼터 관리
+  // ═══════════════════════════════════════════════════════════════
+
+  /// 프로필 조회 가능 여부 확인 (MAX 전용)
+  /// 반환: (가능 여부, 남은 횟수, 오늘 사용한 횟수)
+  Future<({bool canView, int remaining, int used})> checkProfileViewQuota(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    if (!doc.exists) return (canView: false, remaining: 0, used: 0);
+    
+    final user = UserModel.fromFirestore(doc);
+    
+    // MAX 유저만 프로필 조회 가능
+    if (!user.isMax) return (canView: false, remaining: 0, used: 0);
+    
+    // 일일 리셋 체크
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    int usedToday = user.dailyProfileViewCount;
+    
+    if (user.dailyProfileViewResetAt != null) {
+      final resetDate = DateTime(
+        user.dailyProfileViewResetAt!.year,
+        user.dailyProfileViewResetAt!.month,
+        user.dailyProfileViewResetAt!.day,
+      );
+      
+      // 날짜가 바뀌었으면 리셋
+      if (today.isAfter(resetDate)) {
+        usedToday = 0;
+      }
+    }
+    
+    const dailyLimit = 10; // MAX 유저 일일 프로필 조회 한도
+    final remaining = dailyLimit - usedToday;
+    
+    return (canView: remaining > 0, remaining: remaining, used: usedToday);
+  }
+
+  /// 프로필 조회 쿼터 차감 (MAX 전용)
+  Future<bool> useProfileViewQuota(String uid) async {
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (!doc.exists) return false;
+      
+      final user = UserModel.fromFirestore(doc);
+      if (!user.isMax) return false;
+      
+      int usedToday = user.dailyProfileViewCount;
+      
+      // 일일 리셋 체크
+      if (user.dailyProfileViewResetAt != null) {
+        final resetDate = DateTime(
+          user.dailyProfileViewResetAt!.year,
+          user.dailyProfileViewResetAt!.month,
+          user.dailyProfileViewResetAt!.day,
+        );
+        
+        if (today.isAfter(resetDate)) {
+          usedToday = 0;
+        }
+      }
+      
+      await _firestore.collection('users').doc(uid).update({
+        'dailyProfileViewCount': usedToday + 1,
+        'dailyProfileViewResetAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      return true;
+    } catch (e) {
+      debugPrint('프로필 조회 쿼터 차감 실패: $e');
+      return false;
+    }
   }
 }

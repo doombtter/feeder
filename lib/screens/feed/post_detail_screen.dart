@@ -7,6 +7,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../../models/post_model.dart';
 import '../../models/comment_model.dart';
 import '../../models/report_model.dart';
@@ -17,6 +18,7 @@ import '../../services/s3_service.dart';
 import '../chat/chat_request_dialog.dart';
 import '../common/report_dialog.dart';
 import '../../core/widgets/ad_widgets.dart';
+import '../profile/warded_users_screen.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final PostModel post;
@@ -33,6 +35,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _reportService = ReportService();
   bool _isWarded = false;
   int _wardCount = 0;
+  MembershipTier _membershipTier = MembershipTier.free;
   
   CommentModel? _replyingTo;
 
@@ -41,11 +44,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     super.initState();
     _wardCount = widget.post.wardCount;
     _checkWarded();
+    _loadMembershipTier();
   }
 
   @override
   void dispose() {
     super.dispose();
+  }
+
+  Future<void> _loadMembershipTier() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final user = await _userService.getUser(uid);
+      if (mounted && user != null) {
+        setState(() {
+          _membershipTier = user.isMax 
+              ? MembershipTier.max 
+              : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
+        });
+      }
+    }
   }
 
   Future<void> _checkWarded() async {
@@ -136,6 +154,34 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          // 와드한 사람 조회 (내 글 + MAX만)
+          if (isAuthor && MembershipBenefits.canViewWardedUsers(_membershipTier))
+            IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Icon(
+                  Icons.bookmark_rounded,
+                  size: 18,
+                  color: MembershipTier.max.color,
+                ),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WardedUsersScreen(
+                      postId: widget.post.id,
+                      postTitle: widget.post.content,
+                    ),
+                  ),
+                );
+              },
+            ),
           // 더보기 메뉴 (신고/차단)
           PopupMenuButton<String>(
             color: AppColors.card,

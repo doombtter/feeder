@@ -9,6 +9,7 @@ class MessageModel {
   final String? imageUrl;
   final String? voiceUrl;
   final String? videoUrl;
+  final String? videoThumbnailUrl;
   final int? voiceDuration; // 음성 메시지 길이 (초)
   final int? videoDuration; // 동영상 길이 (초)
   final MessageType type;
@@ -23,6 +24,7 @@ class MessageModel {
     this.imageUrl,
     this.voiceUrl,
     this.videoUrl,
+    this.videoThumbnailUrl,
     this.voiceDuration,
     this.videoDuration,
     this.type = MessageType.text,
@@ -50,6 +52,7 @@ class MessageModel {
       imageUrl: data['imageUrl'],
       voiceUrl: data['voiceUrl'],
       videoUrl: data['videoUrl'],
+      videoThumbnailUrl: data['videoThumbnailUrl'],
       voiceDuration: data['voiceDuration'],
       videoDuration: data['videoDuration'],
       type: messageType,
@@ -66,6 +69,7 @@ class MessageModel {
       'imageUrl': imageUrl,
       'voiceUrl': voiceUrl,
       'videoUrl': videoUrl,
+      'videoThumbnailUrl': videoThumbnailUrl,
       'voiceDuration': voiceDuration,
       'videoDuration': videoDuration,
       'type': type.name,
