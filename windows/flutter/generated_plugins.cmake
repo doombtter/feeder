@@ -3,11 +3,13 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  agora_rtc_engine
   cloud_firestore
   file_selector_windows
   firebase_auth
   firebase_core
   flutter_sound
+  iris_method_channel
   permission_handler_windows
   url_launcher_windows
 )

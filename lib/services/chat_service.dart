@@ -333,7 +333,11 @@ class ChatService {
       'isDeleted': false,
     });
 
-    // 채팅방 마지막 메시지 업데이트
+    // 상대방 ID 찾기
+    final participants = List<String>.from(roomData['participants'] ?? []);
+    final receiverId = participants.firstWhere((id) => id != senderId, orElse: () => '');
+
+    // 채팅방 마지막 메시지 업데이트 + 상대방 unreadCount 증가
     final chatRoomRef = _firestore.collection('chatRooms').doc(chatRoomId);
     String lastMessageText = content;
     if (type == 'voice') {
@@ -343,16 +347,22 @@ class ChatService {
     } else if (type == 'video') {
       lastMessageText = '🎬 동영상';
     }
-    batch.update(chatRoomRef, {
+    
+    final updateData = <String, dynamic>{
       'lastMessage': lastMessageText,
       'lastMessageAt': FieldValue.serverTimestamp(),
-    });
+    };
+    
+    // 상대방의 읽지 않은 메시지 카운트 증가
+    if (receiverId.isNotEmpty) {
+      updateData['unreadCounts.$receiverId'] = FieldValue.increment(1);
+    }
+    
+    batch.update(chatRoomRef, updateData);
 
     await batch.commit();
 
     // 상대방에게 알림 전송
-    final participants = List<String>.from(roomData['participants'] ?? []);
-    final receiverId = participants.firstWhere((id) => id != senderId, orElse: () => '');
     if (receiverId.isNotEmpty) {
       final senderProfile = roomData['participantProfiles']?[senderId];
       await _notificationService.sendNewMessageNotification(
@@ -381,6 +391,13 @@ class ChatService {
     for (final doc in unreadMessages.docs) {
       batch.update(doc.reference, {'isRead': true});
     }
+    
+    // 내 unreadCount를 0으로 리셋
+    batch.update(
+      _firestore.collection('chatRooms').doc(chatRoomId),
+      {'unreadCounts.$myUserId': 0},
+    );
+    
     await batch.commit();
   }
 

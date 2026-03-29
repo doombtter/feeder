@@ -252,7 +252,7 @@ class UserService {
       }
     }
     
-    const dailyLimit = 10; // MAX 유저 일일 프로필 조회 한도
+    const dailyLimit = 2; // MAX 유저 일일 프로필 조회 한도
     final remaining = dailyLimit - usedToday;
     
     return (canView: remaining > 0, remaining: remaining, used: usedToday);

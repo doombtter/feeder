@@ -25,6 +25,15 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
   final _authService = AuthService();
   final _suspensionService = SuspensionService();
   bool _isLoading = false;
+  bool _isResending = false;
+  int _resendCooldown = 0;
+  String _currentVerificationId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _currentVerificationId = widget.verificationId;
+  }
 
   @override
   void dispose() {
@@ -63,7 +72,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
 
       // 2. OTP 인증 진행
       final result = await _authService.signInWithOTP(
-        verificationId: widget.verificationId,
+        verificationId: _currentVerificationId,
         otp: _otp,
       );
       debugPrint('🔐 Login success! UID: ${result.user?.uid}');
@@ -301,16 +310,40 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
               const SizedBox(height: 24),
               // 재전송
               Center(
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: Text(
-                    '인증번호 다시 받기',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 14,
-                    ),
+                child: _isResending
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : TextButton(
+                        onPressed: _resendCooldown > 0 ? null : _resendOTP,
+                        child: Text(
+                          _resendCooldown > 0
+                              ? '${_resendCooldown}초 후 재전송 가능'
+                              : '인증번호 다시 받기',
+                          style: TextStyle(
+                            color: _resendCooldown > 0
+                                ? AppColors.textTertiary
+                                : AppColors.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              // 안내 메시지
+              Center(
+                child: Text(
+                  '인증번호가 오지 않나요?\n스팸 메시지함을 확인해주세요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 12,
+                    height: 1.5,
                   ),
                 ),
               ),
@@ -319,5 +352,65 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _resendOTP() async {
+    setState(() => _isResending = true);
+
+    // 입력 필드 초기화
+    for (final c in _otpControllers) {
+      c.clear();
+    }
+    _focusNodes[0].requestFocus();
+
+    await _authService.verifyPhoneNumber(
+      phoneNumber: widget.phoneNumber,
+      onCodeSent: (verificationId) {
+        setState(() {
+          _currentVerificationId = verificationId;
+          _isResending = false;
+          _resendCooldown = 60;
+        });
+        _startCooldownTimer();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('인증번호를 다시 전송했습니다')),
+          );
+        }
+      },
+      onError: (error) {
+        setState(() => _isResending = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error)),
+          );
+        }
+      },
+      onAutoVerify: (credential) async {
+        setState(() => _isResending = false);
+        try {
+          await _authService.signInWithCredential(credential);
+          if (mounted) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('로그인 실패: $e')),
+            );
+          }
+        }
+      },
+    );
+  }
+
+  void _startCooldownTimer() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return false;
+      setState(() => _resendCooldown--);
+      return _resendCooldown > 0;
+    });
   }
 }

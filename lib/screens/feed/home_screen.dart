@@ -28,6 +28,7 @@ import '../common/report_dialog.dart';
 import '../notification/notifications_screen.dart';
 import '../discover/recent_users_screen.dart';
 import '../store/store_screen.dart';
+import '../call/random_call_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -154,6 +155,38 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
                   const SizedBox(width: 8),
+                  // 랜덤 전화 버튼
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: _isSuspended ? null : AppColors.primaryGradient,
+                      color: _isSuspended ? AppColors.card : null,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _isSuspended ? AppColors.border : Colors.transparent, 
+                        width: 0.5,
+                      ),
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.phone_rounded,
+                        size: 20,
+                        color: _isSuspended 
+                            ? AppColors.textTertiary.withOpacity(0.4)
+                            : Colors.white,
+                      ),
+                      onPressed: _isSuspended ? null : () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RandomCallScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                   // 최근 접속자 버튼
                   Container(
                     margin: const EdgeInsets.only(right: 8),
@@ -672,7 +705,7 @@ class _PostCardState extends State<_PostCard> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('오늘 프로필 조회 횟수를 모두 사용했어요 (일 10회)'),
+            content: Text('오늘 프로필 조회 횟수를 모두 사용했어요 (일 2회)'),
           ),
         );
       }

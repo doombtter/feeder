@@ -1,6 +1,8 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
+const { onCall } = require("firebase-functions/v2/https");
+const { RtcTokenBuilder, RtcRole } = require("agora-access-token");
 const {
   getFirestore,
   Timestamp,
@@ -12,7 +14,8 @@ initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
-
+const AGORA_APP_ID = "b973b8cdc1344f9783512d068d65517b";
+const AGORA_APP_CERTIFICATE = "21ceead76a024cbf93f31a5a07e235f9";
 
 // 🔔 멀티토큰 푸시 알림
 exports.sendPushNotification = onDocumentCreated(
@@ -185,13 +188,13 @@ exports.verifyPurchase = onDocumentCreated(
       return null;
     } catch (error) {
       console.error("Purchase verification error:", error);
-      
+
       await event.data.ref.update({
         status: "error",
         error: error.message,
         verifiedAt: Timestamp.now(),
       });
-      
+
       return null;
     }
   }
@@ -283,3 +286,41 @@ exports.cleanupExpiredShots = onSchedule(
     return null;
   }
 );
+
+// 📞 Agora 토큰 생성
+exports.getAgoraToken = onCall(async (request) => {
+  // 인증 확인
+  if (!request.auth) {
+    throw new Error("로그인이 필요합니다");
+  }
+
+  const channelId = request.data.channelId;
+
+  console.log('🔑 토큰 생성 요청');
+  console.log('channelId:', channelId);
+  console.log('APP_ID:', AGORA_APP_ID);
+  console.log('APP_CERTIFICATE 길이:', AGORA_APP_CERTIFICATE.length);
+
+  if (!channelId) {
+    throw new Error("channelId가 필요합니다");
+  }
+
+  const uid = 0;
+  const role = RtcRole.PUBLISHER;
+  const expireTime = 3600;  // 1시간
+  const currentTime = Math.floor(Date.now() / 1000);
+  const privilegeExpireTime = currentTime + expireTime;
+
+  const token = RtcTokenBuilder.buildTokenWithUid(
+    AGORA_APP_ID,
+    AGORA_APP_CERTIFICATE,
+    channelId,
+    uid,
+    role,
+    privilegeExpireTime
+  );
+  
+  console.log('생성된 토큰:', token.substring(0, 20) + '...');
+
+  return { token };
+});

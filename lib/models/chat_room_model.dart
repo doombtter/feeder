@@ -8,6 +8,7 @@ class ChatRoomModel {
   final DateTime? lastMessageAt;
   final DateTime createdAt;
   final bool isActive;
+  final Map<String, int> unreadCounts; // 유저별 읽지 않은 메시지 수
 
   ChatRoomModel({
     required this.id,
@@ -17,6 +18,7 @@ class ChatRoomModel {
     this.lastMessageAt,
     required this.createdAt,
     this.isActive = true,
+    this.unreadCounts = const {},
   });
 
   factory ChatRoomModel.fromFirestore(DocumentSnapshot doc) {
@@ -27,6 +29,9 @@ class ChatRoomModel {
       return MapEntry(key, ParticipantProfile.fromMap(value as Map<String, dynamic>));
     });
 
+    final unreadData = data['unreadCounts'] as Map<String, dynamic>? ?? {};
+    final unreadCounts = unreadData.map((key, value) => MapEntry(key, (value as num?)?.toInt() ?? 0));
+
     return ChatRoomModel(
       id: doc.id,
       participants: List<String>.from(data['participants'] ?? []),
@@ -35,6 +40,7 @@ class ChatRoomModel {
       lastMessageAt: (data['lastMessageAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: data['isActive'] ?? true,
+      unreadCounts: unreadCounts,
     );
   }
 
@@ -46,6 +52,7 @@ class ChatRoomModel {
       'lastMessageAt': lastMessageAt != null ? Timestamp.fromDate(lastMessageAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'isActive': isActive,
+      'unreadCounts': unreadCounts,
     };
   }
 
@@ -57,6 +64,11 @@ class ChatRoomModel {
 
   String getOtherUid(String myUid) {
     return participants.firstWhere((uid) => uid != myUid, orElse: () => '');
+  }
+
+  // 내 읽지 않은 메시지 수
+  int getUnreadCount(String myUid) {
+    return unreadCounts[myUid] ?? 0;
   }
 }
 

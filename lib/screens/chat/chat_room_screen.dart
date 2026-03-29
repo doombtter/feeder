@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -1469,6 +1470,7 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
   bool _isInitialized = false;
   bool _isLoading = true;
   bool _showControls = true;
+  bool _isFullScreen = false;
   Timer? _hideControlsTimer;
   final _videoService = VideoService();
 
@@ -1540,10 +1542,34 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
     setState(() {});
   }
 
+  void _toggleFullScreen() {
+    setState(() => _isFullScreen = !_isFullScreen);
+    
+    if (_isFullScreen) {
+      // 가로 모드로 전환
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      // 세로 모드로 복원
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
     _controller?.dispose();
+    // 세로 모드로 복원
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
@@ -1557,7 +1583,7 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
+      appBar: _isFullScreen ? null : AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -1598,6 +1624,27 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
                 child: Text(
                   '동영상을 재생할 수 없습니다',
                   style: TextStyle(color: Colors.white70),
+                ),
+              ),
+
+            // 가로모드 닫기 버튼
+            if (_isFullScreen && _showControls)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 8,
+                left: 8,
+                child: IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.close, color: Colors.white, size: 24),
+                  ),
+                  onPressed: () {
+                    _toggleFullScreen();
+                    Navigator.pop(context);
+                  },
                 ),
               ),
 
@@ -1686,12 +1733,27 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
                                         fontSize: 12,
                                       ),
                                     ),
-                                    Text(
-                                      _formatDuration(value.duration),
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12,
-                                      ),
+                                    Row(
+                                      children: [
+                                        // 전체화면 버튼
+                                        IconButton(
+                                          icon: Icon(
+                                            _isFullScreen 
+                                                ? Icons.fullscreen_exit_rounded 
+                                                : Icons.fullscreen_rounded,
+                                            color: Colors.white70,
+                                            size: 24,
+                                          ),
+                                          onPressed: _toggleFullScreen,
+                                        ),
+                                        Text(
+                                          _formatDuration(value.duration),
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),

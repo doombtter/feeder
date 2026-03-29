@@ -122,6 +122,148 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
     setState(() => _showMaxBadge = newValue);
   }
 
+  void _showCreateGroupChatDialog() {
+    final titleController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('단톡 개설', style: TextStyle(color: AppColors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: InputDecoration(
+                hintText: '단톡방 제목',
+                hintStyle: TextStyle(color: AppColors.textTertiary),
+                filled: true,
+                fillColor: AppColors.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              style: TextStyle(color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '모든 접속 유저가 참여할 수 있는\n1회성 단톡방이 개설됩니다.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final title = titleController.text.trim();
+              if (title.isEmpty) return;
+              
+              Navigator.pop(context);
+              await _createGroupChat(title);
+            },
+            child: const Text('개설', style: TextStyle(color: AppColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createGroupChat(String title) async {
+    // 기존 활성 단톡 종료
+    final existing = await _firestore.collection('groupChats')
+        .where('isActive', isEqualTo: true)
+        .get();
+    
+    for (final doc in existing.docs) {
+      await doc.reference.update({'isActive': false});
+    }
+    
+    // 새 단톡 생성
+    await _firestore.collection('groupChats').add({
+      'title': title,
+      'isActive': true,
+      'createdBy': _uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'participants': [_uid],
+      'lastMessage': '',
+      'lastMessageAt': FieldValue.serverTimestamp(),
+    });
+
+    // 운영자 환영 메시지 추가
+    final newChat = await _firestore.collection('groupChats')
+        .where('isActive', isEqualTo: true)
+        .limit(1)
+        .get();
+    
+    if (newChat.docs.isNotEmpty) {
+      await _firestore
+          .collection('groupChats')
+          .doc(newChat.docs.first.id)
+          .collection('messages')
+          .add({
+        'senderId': 'admin',
+        'senderNickname': '운영자',
+        'content': '🎉 단톡방이 개설되었습니다! 자유롭게 대화해주세요.',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('단톡 "$title" 개설됨'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
+
+  Future<void> _closeGroupChat(String groupChatId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('단톡 종료', style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text(
+          '단톡방을 종료하시겠습니까?\n참여자들은 더 이상 채팅할 수 없습니다.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('종료', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _firestore.collection('groupChats').doc(groupChatId).update({
+        'isActive': false,
+        'closedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('단톡이 종료되었습니다')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -249,6 +391,107 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
                       activeColor: MembershipTier.max.color,
                     ),
                   ]),
+                const SizedBox(height: 24),
+
+                // 운영자 단톡 관리
+                _buildSection('운영자 단톡', [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showCreateGroupChatDialog,
+                      icon: const Icon(Icons.groups_rounded),
+                      label: const Text('단톡 개설'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: _firestore.collection('groupChats')
+                        .where('isActive', isEqualTo: true)
+                        .limit(1)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Text(
+                          '현재 활성화된 단톡 없음',
+                          style: TextStyle(
+                            color: AppColors.textTertiary,
+                            fontSize: 13,
+                          ),
+                        );
+                      }
+                      
+                      final doc = snapshot.data!.docs.first;
+                      final data = doc.data() as Map<String, dynamic>;
+                      final title = data['title'] ?? '단톡';
+                      final count = (data['participants'] as List?)?.length ?? 0;
+                      
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.success,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'LIVE',
+                                          style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        title,
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '참여자 $count명',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () => _closeGroupChat(doc.id),
+                            icon: const Icon(Icons.close_rounded),
+                            color: AppColors.error,
+                            tooltip: '단톡 종료',
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ]),
 
                 const SizedBox(height: 40),
 

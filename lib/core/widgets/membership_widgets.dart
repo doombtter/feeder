@@ -197,23 +197,23 @@ class MembershipBenefits {
   static int getDailyVideoLimit(MembershipTier tier) {
     switch (tier) {
       case MembershipTier.free:
-        return 0;  // 프리미엄과 채팅 시에만 권한 부여
+        return 0;  // 프리미엄과 채팅 시에만 권한 부여받음
       case MembershipTier.premium:
         return 5;
       case MembershipTier.max:
-        return 5;  // 본인 전송은 동일
+        return 10;
     }
   }
 
-  // 상대방에게 부여하는 동영상 권한 횟수
+  // 상대방에게 부여하는 동영상 권한 횟수 (한번에 3회씩)
   static int getGrantedVideoLimit(MembershipTier tier) {
     switch (tier) {
       case MembershipTier.free:
         return 0;
       case MembershipTier.premium:
-        return 3;
+        return 3;  // 한번에 3회
       case MembershipTier.max:
-        return 5;  // +2회 추가
+        return 6;  // 한번에 6회
     }
   }
 
@@ -255,7 +255,19 @@ class MembershipBenefits {
       case MembershipTier.premium:
         return 0;
       case MembershipTier.max:
-        return 10;  // 일 10회
+        return 2;  // 일 2회
+    }
+  }
+
+  // 일일 랜덤 전화 횟수
+  static int getDailyRandomCalls(MembershipTier tier) {
+    switch (tier) {
+      case MembershipTier.free:
+        return 1;
+      case MembershipTier.premium:
+        return 3;
+      case MembershipTier.max:
+        return 10;
     }
   }
 }
