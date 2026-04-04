@@ -23,6 +23,7 @@ class RandomCallService {
   StreamSubscription? _myDocSubscription;  // 내 문서 감지용
   Timer? _timeoutTimer;
   bool _isMatched = false;  // 중복 호출 방지
+  String? _myGender;  // 내 성별 캐시
 
   // 콜백
   Function(String matchedUserId, String channelId)? onMatched;
@@ -114,6 +115,7 @@ class RandomCallService {
     try {
       // 중복 방지 플래그 리셋
       _isMatched = false;
+      _myGender = gender;  // 내 성별 저장
       
       // 쿼터 체크
       final quota = await checkCallQuota();
@@ -153,6 +155,8 @@ class RandomCallService {
 
   /// 매칭 상대 찾기
   void _startMatching(String lookingFor) {
+    debugPrint('🔍 매칭 시작: lookingFor=$lookingFor, myGender=$_myGender');
+    
     _matchSubscription = _firestore
         .collection('randomCallQueue')
         .where('gender', isEqualTo: lookingFor)
@@ -162,6 +166,8 @@ class RandomCallService {
         .limit(1)
         .snapshots()
         .listen((snapshot) async {
+      debugPrint('🔍 매칭 스냅샷: ${snapshot.docs.length}명 발견, _isMatched=$_isMatched');
+      
       if (_isMatched) return;  // 이미 매칭됨
       if (snapshot.docs.isEmpty) return;
 
@@ -169,6 +175,7 @@ class RandomCallService {
       if (matchedDoc.id == _uid) return; // 자기 자신 제외
 
       final matchedUserId = matchedDoc.id;
+      debugPrint('✅ 매칭 상대 발견: $matchedUserId');
       
       // 채널 ID 생성 (짧게 - Agora 64자 제한)
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -190,6 +197,7 @@ class RandomCallService {
       });
 
       await batch.commit();
+      debugPrint('✅ Firestore 업데이트 완료: channelId=$channelId');
 
       // 쿼터 차감
       await useCallQuota();
@@ -213,7 +221,11 @@ class RandomCallService {
       if (!doc.exists) return;
       
       final data = doc.data()!;
+      debugPrint('📄 내 문서 변경: status=${data['status']}, matchedWith=${data['matchedWith']}');
+      
       if (data['status'] == 'matched' && data['matchedWith'] != null) {
+        debugPrint('✅ 상대가 먼저 매칭! channelId=${data['channelId']}');
+        
         // 중복 방지
         _isMatched = true;
         
@@ -231,8 +243,7 @@ class RandomCallService {
   }
 
   String? _getMyGender() {
-    // 캐시된 성별 정보 사용 (실제로는 UserService에서 가져와야 함)
-    return null;
+    return _myGender;
   }
 
   /// 대기열에서 나가기

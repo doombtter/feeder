@@ -74,6 +74,9 @@ class UserService {
         'gender': gender,
         'region': region,
         'updatedAt': FieldValue.serverTimestamp(),
+        'lastSeenAt': FieldValue.serverTimestamp(),  // 추가!
+        'isOnline': true,  // 추가!
+        'isActive': true,  // 추가!
       };
 
       if (profileImageUrl != null) {
@@ -95,6 +98,7 @@ class UserService {
         'receivedRequestCount': 0,
         'isOnline': true,
         'isActive': true,
+        'lastSeenAt': FieldValue.serverTimestamp(),  // 추가!
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -163,49 +167,117 @@ class UserService {
     });
   }
 
-  // 최근 접속자 목록 (최근 24시간 내 접속, 본인 제외)
+  // 최근 접속자 목록 (최근 7일 내 접속, 현재 오프라인인 사람들, 본인 제외)
+  // → 앱 종료해도 여기 남아있음
   Future<List<UserModel>> getRecentUsers({
     required String currentUid,
     String? genderFilter,
     int limit = 50,
   }) async {
     final now = DateTime.now();
-    final oneDayAgo = now.subtract(const Duration(hours: 24));
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
-    Query query = _firestore
+    try {
+      // isOnline이 false인 사람들 중 최근 접속자
+      Query query = _firestore
+          .collection('users')
+          .where('isActive', isEqualTo: true)
+          .where('isOnline', isEqualTo: false)  // 오프라인인 사람만
+          .where('lastSeenAt', isGreaterThan: Timestamp.fromDate(sevenDaysAgo))
+          .orderBy('lastSeenAt', descending: true)
+          .limit(limit + 1);
+
+      final snapshot = await query.get();
+
+      final users = snapshot.docs
+          .map((doc) => UserModel.fromFirestore(doc))
+          .where((user) => user.uid != currentUid)
+          .where((user) => user.isProfileComplete)
+          .where((user) => genderFilter == null || user.gender == genderFilter)
+          .take(limit)
+          .toList();
+
+      return users;
+    } catch (e) {
+      debugPrint('getRecentUsers error: $e');
+      // 인덱스 에러 등 발생 시 대체 쿼리
+      return _getRecentUsersFallback(currentUid, genderFilter, limit);
+    }
+  }
+
+  // 인덱스 없을 때 대체 쿼리
+  Future<List<UserModel>> _getRecentUsersFallback(
+    String currentUid,
+    String? genderFilter,
+    int limit,
+  ) async {
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+    final snapshot = await _firestore
         .collection('users')
         .where('isActive', isEqualTo: true)
-        .where('lastSeenAt', isGreaterThan: Timestamp.fromDate(oneDayAgo))
         .orderBy('lastSeenAt', descending: true)
-        .limit(limit + 1); // 본인 제외용 +1
-
-    final snapshot = await query.get();
+        .limit(100)
+        .get();
 
     final users = snapshot.docs
         .map((doc) => UserModel.fromFirestore(doc))
-        .where((user) => user.uid != currentUid) // 본인 제외
-        .where((user) => user.isProfileComplete) // 프로필 완성된 유저만
-        .where((user) => genderFilter == null || user.gender == genderFilter) // 성별 필터
+        .where((user) => user.uid != currentUid)
+        .where((user) => user.isProfileComplete)
+        .where((user) => !user.isOnline)  // 오프라인만
+        .where((user) => user.lastSeenAt != null && user.lastSeenAt!.isAfter(sevenDaysAgo))
+        .where((user) => genderFilter == null || user.gender == genderFilter)
         .take(limit)
         .toList();
 
     return users;
   }
 
-  // 현재 온라인 유저 목록
+  // 현재 온라인 유저 목록 (isOnline: true인 사람만)
   Future<List<UserModel>> getOnlineUsers({
     required String currentUid,
     String? genderFilter,
     int limit = 30,
   }) async {
-    Query query = _firestore
+    try {
+      Query query = _firestore
+          .collection('users')
+          .where('isActive', isEqualTo: true)
+          .where('isOnline', isEqualTo: true)
+          .orderBy('lastSeenAt', descending: true)
+          .limit(limit + 1);
+
+      final snapshot = await query.get();
+
+      final users = snapshot.docs
+          .map((doc) => UserModel.fromFirestore(doc))
+          .where((user) => user.uid != currentUid)
+          .where((user) => user.isProfileComplete)
+          .where((user) => genderFilter == null || user.gender == genderFilter)
+          .take(limit)
+          .toList();
+
+      return users;
+    } catch (e) {
+      debugPrint('getOnlineUsers error: $e');
+      // 인덱스 에러 등 발생 시 대체 쿼리
+      return _getOnlineUsersFallback(currentUid, genderFilter, limit);
+    }
+  }
+
+  // 인덱스 없을 때 대체 쿼리
+  Future<List<UserModel>> _getOnlineUsersFallback(
+    String currentUid,
+    String? genderFilter,
+    int limit,
+  ) async {
+    final snapshot = await _firestore
         .collection('users')
         .where('isActive', isEqualTo: true)
         .where('isOnline', isEqualTo: true)
-        .orderBy('lastSeenAt', descending: true)
-        .limit(limit + 1);
-
-    final snapshot = await query.get();
+        .limit(100)
+        .get();
 
     final users = snapshot.docs
         .map((doc) => UserModel.fromFirestore(doc))
@@ -214,6 +286,13 @@ class UserService {
         .where((user) => genderFilter == null || user.gender == genderFilter)
         .take(limit)
         .toList();
+
+    // lastSeenAt 기준 정렬
+    users.sort((a, b) {
+      final aTime = a.lastSeenAt ?? DateTime(2000);
+      final bTime = b.lastSeenAt ?? DateTime(2000);
+      return bTime.compareTo(aTime);
+    });
 
     return users;
   }

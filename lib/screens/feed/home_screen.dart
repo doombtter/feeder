@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -30,6 +31,13 @@ import '../discover/recent_users_screen.dart';
 import '../store/store_screen.dart';
 import '../call/random_call_screen.dart';
 
+// 글 ID 기반 랜덤 6글자 문자열 생성
+String generateRandomId(String seed) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  final random = Random(seed.hashCode);
+  return List.generate(6, (_) => chars[random.nextInt(chars.length)]).join();
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -49,7 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSuspended = false;
   DateTime? _suspensionExpiresAt;
   final _interstitialController = InterstitialAdController();
-  // Timer? _adTimer; ← 삭제
 
   // Feed 새로고침용 키
   final GlobalKey<_FeedListState> _feedKey = GlobalKey<_FeedListState>();
@@ -61,12 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadUserStatus();
     _interstitialController.preload();
-    // 5분 타이머 삭제됨 - 탭 전환 시 체크로 변경
   }
 
   @override
   void dispose() {
-    // _adTimer?.cancel(); ← 삭제
     _interstitialController.dispose();
     super.dispose();
   }
@@ -118,15 +123,14 @@ class _HomeScreenState extends State<HomeScreen> {
             : AppBar(
                 title: Row(
                   children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: AppColors.primaryGradient,
-                        borderRadius: BorderRadius.circular(10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        'assets/icon/feeder_icon_1024x1024.png',
+                        width: 36,
+                        height: 36,
+                        fit: BoxFit.cover,
                       ),
-                      child: const Icon(Icons.local_fire_department_rounded,
-                          color: Colors.white, size: 20),
                     ),
                     const SizedBox(width: 10),
                     const Text(
@@ -636,12 +640,17 @@ class _PostCardState extends State<_PostCard> {
   final _userService = UserService();
   bool _isWarded = false;
   int _wardCount = 0;
+  
+  // 글 ID 기반 랜덤 닉네임
+  late final String _postNickname;
 
   @override
   void initState() {
     super.initState();
     _wardCount = widget.post.wardCount;
     _checkWarded();
+    // 글 ID를 seed로 사용하여 매 글마다 다른 닉네임
+    _postNickname = generateRandomId(widget.post.id);
   }
 
   Future<void> _checkWarded() async {
@@ -813,72 +822,73 @@ class _PostCardState extends State<_PostCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 헤더 영역
+            // 헤더 영역 (한 줄로 압축)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               child: Row(
                 children: [
                   // 성별 인디케이터 (MAX 유저는 탭하여 프로필 조회)
                   GestureDetector(
                     onTap: isAuthor ? null : () => _viewAuthorProfile(context),
-                    child: GenderBadge(gender: widget.post.authorGender, size: 40),
+                    child: GenderBadge(gender: widget.post.authorGender, size: 32),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
+                  // 랜덤 닉네임 (글 ID 기반)
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            // 익명 텍스트 (MAX 유저는 탭하여 프로필 조회)
-                            GestureDetector(
-                              onTap: isAuthor ? null : () => _viewAuthorProfile(context),
-                              child: Text(
-                                '익명',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
+                    child: GestureDetector(
+                      onTap: isAuthor ? null : () => _viewAuthorProfile(context),
+                      child: Row(
+                        children: [
+                          Text(
+                            _postNickname,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textPrimary,
                             ),
-                            const SizedBox(width: 6),
-                            GenderTextBadge(gender: widget.post.authorGender),
-                            // MAX 유저에게 프로필 조회 가능 힌트
-                            if (widget.membershipTier == MembershipTier.max && !isAuthor) ...[
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.visibility_rounded,
-                                size: 14,
-                                color: MembershipTier.max.color.withOpacity(0.7),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.post.timeAgo,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textTertiary,
                           ),
-                        ),
-                      ],
+                          // MAX 유저에게 프로필 조회 가능 힌트
+                          if (widget.membershipTier == MembershipTier.max && !isAuthor) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.visibility_rounded,
+                              size: 12,
+                              color: MembershipTier.max.color.withOpacity(0.7),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          Text(
+                            '·',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            widget.post.timeAgo,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   // 더보기 버튼
                   GestureDetector(
                     onTap: () => _showPostOptions(context),
                     child: Container(
-                      width: 32,
-                      height: 32,
+                      width: 28,
+                      height: 28,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Icon(
                         Icons.more_vert_rounded,
                         color: AppColors.textTertiary,
-                        size: 20,
+                        size: 18,
                       ),
                     ),
                   ),
@@ -935,11 +945,11 @@ class _PostCardState extends State<_PostCard> {
               ),
             ],
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
             // 액션 영역 (하단 분리)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: const BorderRadius.only(
@@ -1006,7 +1016,7 @@ class _PostCardState extends State<_PostCard> {
                             context: context,
                             builder: (context) => ChatRequestDialog(
                               toUserId: widget.post.authorId,
-                              toUserNickname: '익명',
+                              toUserNickname: _postNickname,
                               fromUser: myUser,
                             ),
                           );
@@ -1106,7 +1116,7 @@ class _PostCardState extends State<_PostCard> {
                         context: context,
                         builder: (context) => ChatRequestDialog(
                           toUserId: widget.post.authorId,
-                          toUserNickname: '익명',
+                          toUserNickname: _postNickname,
                           fromUser: myUser,
                         ),
                       );

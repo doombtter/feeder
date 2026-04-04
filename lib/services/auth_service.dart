@@ -21,12 +21,35 @@ class AuthService {
   }) async {
     await _auth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
-      timeout: const Duration(seconds: 60),
+      timeout: const Duration(seconds: 120), // 타임아웃 2분으로 늘림
       verificationCompleted: (PhoneAuthCredential credential) async {
         onAutoVerify(credential);
       },
       verificationFailed: (FirebaseAuthException e) {
-        onError(e.message ?? '인증에 실패했습니다.');
+        String message;
+        switch (e.code) {
+          case 'invalid-phone-number':
+            message = '올바른 전화번호 형식이 아닙니다';
+            break;
+          case 'too-many-requests':
+            message = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요';
+            break;
+          case 'quota-exceeded':
+            message = '일일 인증 한도를 초과했습니다. 내일 다시 시도해주세요';
+            break;
+          case 'app-not-authorized':
+            message = '앱 인증 설정에 문제가 있습니다';
+            break;
+          case 'captcha-check-failed':
+            message = '보안 검증에 실패했습니다. 다시 시도해주세요';
+            break;
+          case 'network-request-failed':
+            message = '네트워크 연결을 확인해주세요';
+            break;
+          default:
+            message = e.message ?? '인증에 실패했습니다';
+        }
+        onError(message);
       },
       codeSent: (String verificationId, int? resendToken) {
         onCodeSent(verificationId);

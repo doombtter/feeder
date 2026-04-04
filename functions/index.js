@@ -14,8 +14,10 @@ initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
-const AGORA_APP_ID = "b973b8cdc1344f9783512d068d65517b";
-const AGORA_APP_CERTIFICATE = "21ceead76a024cbf93f31a5a07e235f9";
+const { defineSecret } = require("firebase-functions/params");
+
+const AGORA_APP_ID = defineSecret("AGORA_APP_ID");
+const AGORA_APP_CERTIFICATE = defineSecret("AGORA_APP_CERTIFICATE");
 
 // 🔔 멀티토큰 푸시 알림
 exports.sendPushNotification = onDocumentCreated(

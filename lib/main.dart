@@ -12,8 +12,10 @@ import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/widgets/splash_screen.dart';
 
-// Screens
-import 'screens/auth/phone_input_screen.dart';
+// Screens - 새로운 인증 플로우
+import 'screens/auth/social_login_screen.dart';
+import 'screens/auth/phone_link_screen.dart';
+import 'screens/auth/phone_verify_screen.dart';
 import 'screens/feed/home_screen.dart';
 import 'screens/profile/profile_setup_screen.dart';
 
@@ -57,6 +59,7 @@ void main() async {
   } catch (e) {
     debugPrint("❌ Plugin attach FAILED: $e");
   }
+  
   // AdMob 초기화
   await AdMobService.initialize();
 
@@ -99,19 +102,11 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
         _userService.setOnlineStatus(user.uid, true);
         break;
       case AppLifecycleState.paused:
-      case AppLifecycleState.inactive:
       case AppLifecycleState.detached:
+      case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
         _userService.setOnlineStatus(user.uid, false);
         break;
-    }
-  }
-
-  void _onSplashComplete() {
-    if (mounted) {
-      setState(() {
-        _showSplash = false;
-      });
     }
   }
 
@@ -124,14 +119,43 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
       home: _showSplash
-          ? SplashScreen(onComplete: _onSplashComplete)
+          ? SplashScreen(
+              onComplete: () {
+                setState(() => _showSplash = false);
+              },
+            )
           : const AuthWrapper(),
     );
   }
 }
 
+/// 인증 상태 확인 래퍼
+/// 
+/// 새로운 인증 플로우:
+/// 1. 비로그인 → SocialLoginScreen (Google/Apple 선택)
+/// 2. 소셜 로그인 후 → PhoneVerifyScreen (매번 전화번호 인증)
+/// 3. 전화번호 인증 완료 → ProfileCheckWrapper
+/// 
+/// 기존 계정이어도 매번 전화번호 인증을 거칩니다.
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+  
+  /// 새 로그인 시작 표시 (SocialLoginScreen에서 호출)
+  static void markNewLogin() {
+    _AuthWrapperState._isNewLogin = true;
+    _AuthWrapperState._phoneVerifiedThisSession = false;
+  }
+  
+  /// 전화번호 인증 완료 표시
+  static void markPhoneVerified() {
+    _AuthWrapperState._phoneVerifiedThisSession = true;
+  }
+  
+  /// 로그아웃 시 세션 플래그 초기화
+  static void resetSession() {
+    _AuthWrapperState._isNewLogin = false;
+    _AuthWrapperState._phoneVerifiedThisSession = false;
+  }
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
@@ -139,10 +163,22 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   late final Stream<User?> _authStream;
+  
+  // 새 로그인(소셜 로그인 직접 수행)인지 여부
+  static bool _isNewLogin = false;
+  
+  // 이번 새 로그인 세션에서 전화번호 인증 완료 여부
+  static bool _phoneVerifiedThisSession = false;
+  
+  // 앱 시작 시 이미 로그인되어 있었는지
+  bool _wasLoggedInOnStart = false;
 
   @override
   void initState() {
     super.initState();
+    
+    // 앱 시작 시 이미 로그인되어 있으면 자동 로그인
+    _wasLoggedInOnStart = FirebaseAuth.instance.currentUser != null;
 
     // Android native가 세션 복구할 시간을 잠깐 준 후 authStateChanges attach
     _authStream = Stream<User?>.fromFuture(
@@ -169,13 +205,40 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
         final user = snapshot.data;
 
-        if (user != null) {
-          // 자동 로그인 성공
-          return const ProfileCheckWrapper();
-        } else {
-          // 비로그인 상태
-          return const PhoneInputScreen();
+        if (user == null) {
+          // 비로그인 상태 → 소셜 로그인 화면
+          AuthWrapper.resetSession();
+          return const SocialLoginScreen();
         }
+
+        // 전화번호 연동 여부 확인
+        final hasPhoneProvider = user.providerData.any(
+          (info) => info.providerId == 'phone',
+        );
+
+        if (!hasPhoneProvider) {
+          // 전화번호 미연동 → 전화번호 연동 화면 (최초 가입)
+          return PhoneLinkScreen(user: user);
+        }
+        
+        // 자동 로그인(앱 시작 시 이미 로그인됨)이면 바로 통과
+        if (_wasLoggedInOnStart && !_isNewLogin) {
+          return const ProfileCheckWrapper();
+        }
+        
+        // 새 로그인인데 전화번호 인증 안 했으면 인증 필요
+        if (_isNewLogin && !_phoneVerifiedThisSession) {
+          return PhoneVerifyScreen(
+            user: user,
+            onVerified: () {
+              AuthWrapper.markPhoneVerified();
+              setState(() {}); // 화면 갱신
+            },
+          );
+        }
+
+        // 전화번호 인증까지 완료 → 프로필 체크
+        return const ProfileCheckWrapper();
       },
     );
   }
