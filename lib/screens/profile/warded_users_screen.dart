@@ -259,7 +259,7 @@ class _UserCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: InkWell(
         onTap: onTap,
@@ -276,7 +276,7 @@ class _UserCard extends StatelessWidget {
                     height: 56,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: genderColor.withOpacity(0.5), width: 2),
+                      border: Border.all(color: genderColor.withValues(alpha:0.5), width: 2),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
@@ -337,7 +337,7 @@ class _UserCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.2),
+                              color: AppColors.primary.withValues(alpha:0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
@@ -358,7 +358,7 @@ class _UserCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: genderColor.withOpacity(0.15),
+                            color: genderColor.withValues(alpha:0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -399,7 +399,7 @@ class _UserCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withValues(alpha:0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -418,10 +418,10 @@ class _UserCard extends StatelessWidget {
 
   Widget _buildDefaultAvatar(Color color) {
     return Container(
-      color: color.withOpacity(0.2),
+      color: color.withValues(alpha:0.2),
       child: Icon(
         Icons.person_rounded,
-        color: color.withOpacity(0.5),
+        color: color.withValues(alpha:0.5),
         size: 32,
       ),
     );

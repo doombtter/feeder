@@ -301,9 +301,9 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.warning.withOpacity(0.1),
+                    color: AppColors.warning.withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.warning.withOpacity(0.5)),
+                    border: Border.all(color: AppColors.warning.withValues(alpha:0.5)),
                   ),
                   child: const Row(
                     children: [
@@ -525,7 +525,7 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border.withOpacity(0.5)),
+            border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
           ),
           child: Column(children: children),
         ),

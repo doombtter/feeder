@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
-import '../../services/auth_service.dart';
 import 'profile_edit_screen.dart';
 import 'my_posts_screen.dart';
 import 'warded_posts_screen.dart';
@@ -94,9 +93,9 @@ class MyProfileScreen extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.1),
+        color: AppColors.error.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.error.withOpacity(0.3)),
+        border: Border.all(color: AppColors.error.withValues(alpha:0.3)),
       ),
       child: Row(
         children: [
@@ -104,7 +103,7 @@ class MyProfileScreen extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.error.withOpacity(0.2),
+              color: AppColors.error.withValues(alpha:0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.block_rounded, color: AppColors.error, size: 24),
@@ -126,7 +125,7 @@ class MyProfileScreen extends StatelessWidget {
                 Text(
                   _getSuspensionRemainingText(user),
                   style: TextStyle(
-                    color: AppColors.error.withOpacity(0.8),
+                    color: AppColors.error.withValues(alpha:0.8),
                     fontSize: 13,
                   ),
                 ),
@@ -158,7 +157,7 @@ class MyProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border.withOpacity(0.5), width: 0.5),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
       ),
       child: Column(
         children: [
@@ -241,9 +240,9 @@ class MyProfileScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.1),
+                color: AppColors.error.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(color: AppColors.error.withValues(alpha:0.3)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -310,8 +309,8 @@ class MyProfileScreen extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: LinearGradient(
           colors: user.gender == 'male' 
-            ? [AppColors.male.withOpacity(0.3), AppColors.male.withOpacity(0.1)]
-            : [AppColors.female.withOpacity(0.3), AppColors.female.withOpacity(0.1)],
+            ? [AppColors.male.withValues(alpha:0.3), AppColors.male.withValues(alpha:0.1)]
+            : [AppColors.female.withValues(alpha:0.3), AppColors.female.withValues(alpha:0.1)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -357,14 +356,14 @@ class MyProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.primary.withOpacity(0.15),
-            AppColors.primaryLight.withOpacity(0.08),
+            AppColors.primary.withValues(alpha:0.15),
+            AppColors.primaryLight.withValues(alpha:0.08),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 0.5),
+        border: Border.all(color: AppColors.primary.withValues(alpha:0.2), width: 0.5),
       ),
       child: Row(
         children: [
@@ -373,7 +372,7 @@ class MyProfileScreen extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.2),
+              color: AppColors.primary.withValues(alpha:0.2),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
@@ -442,7 +441,7 @@ class MyProfileScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.3),
+                    color: AppColors.primary.withValues(alpha:0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -543,7 +542,7 @@ class MyProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withOpacity(0.5), width: 0.5),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
       ),
       child: Column(
         children: [
@@ -586,9 +585,9 @@ class _QuickMenuItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: isDisabled ? AppColors.card.withOpacity(0.5) : AppColors.card,
+          color: isDisabled ? AppColors.card.withValues(alpha:0.5) : AppColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border.withOpacity(0.5), width: 0.5),
+          border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
         ),
         child: Column(
           children: [
@@ -605,7 +604,7 @@ class _QuickMenuItem extends StatelessWidget {
                   child: Icon(
                     icon, 
                     color: isDisabled 
-                        ? AppColors.textTertiary.withOpacity(0.4) 
+                        ? AppColors.textTertiary.withValues(alpha:0.4) 
                         : AppColors.textSecondary, 
                     size: 22,
                   ),
@@ -638,7 +637,7 @@ class _QuickMenuItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 color: isDisabled 
-                    ? AppColors.textTertiary.withOpacity(0.4) 
+                    ? AppColors.textTertiary.withValues(alpha:0.4) 
                     : AppColors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),

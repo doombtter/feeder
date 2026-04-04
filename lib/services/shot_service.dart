@@ -52,8 +52,9 @@ class ShotService {
           .map((doc) => ShotModel.fromFirestore(doc))
           .where((shot) {
         if (shot.isExpired) return false;
-        if (excludeUserId != null && shot.authorId == excludeUserId)
+        if (excludeUserId != null && shot.authorId == excludeUserId) {
           return false;
+        }
         return true;
       }).toList();
     });

@@ -147,7 +147,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.card.withOpacity(0.9),
+                  color: AppColors.card.withValues(alpha:0.9),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
@@ -159,7 +159,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 padding: const EdgeInsets.only(right: 8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: AppColors.card.withOpacity(0.9),
+                    color: AppColors.card.withValues(alpha:0.9),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: PopupMenuButton<String>(
@@ -254,7 +254,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 end: Alignment.bottomCenter,
                                 colors: [
                                   Colors.transparent,
-                                  AppColors.background.withOpacity(0.8),
+                                  AppColors.background.withValues(alpha:0.8),
                                 ],
                               ),
                             ),
@@ -309,7 +309,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                    border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,7 +366,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.card,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                      border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

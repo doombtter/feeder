@@ -251,13 +251,13 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
     
     if (isSelected) {
       if (value == 'male') {
-        chipColor = AppColors.male.withOpacity(0.2);
+        chipColor = AppColors.male.withValues(alpha:0.2);
         textColor = AppColors.male;
       } else if (value == 'female') {
-        chipColor = AppColors.female.withOpacity(0.2);
+        chipColor = AppColors.female.withValues(alpha:0.2);
         textColor = AppColors.female;
       } else {
-        chipColor = AppColors.primary.withOpacity(0.2);
+        chipColor = AppColors.primary.withValues(alpha:0.2);
         textColor = AppColors.primary;
       }
     }
@@ -270,7 +270,7 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
           color: chipColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? textColor.withOpacity(0.5) : AppColors.border,
+            color: isSelected ? textColor.withValues(alpha:0.5) : AppColors.border,
           ),
         ),
         child: Row(
@@ -421,7 +421,7 @@ class _UserCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border.withOpacity(0.5)),
+          border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
         ),
         child: Row(
           children: [
@@ -492,7 +492,7 @@ class _UserCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: genderColor.withOpacity(0.1),
+                          color: genderColor.withValues(alpha:0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -536,7 +536,7 @@ class _UserCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF22C55E).withOpacity(0.1),
+                            color: const Color(0xFF22C55E).withValues(alpha:0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(

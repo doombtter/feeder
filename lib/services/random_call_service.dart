@@ -179,7 +179,7 @@ class RandomCallService {
       
       // 채널 ID 생성 (짧게 - Agora 64자 제한)
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final channelId = 'call_${timestamp}';
+      final channelId = 'call_$timestamp';
 
       // 양쪽 모두 matched로 업데이트
       final batch = _firestore.batch();

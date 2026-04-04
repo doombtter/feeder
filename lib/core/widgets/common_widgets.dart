@@ -87,13 +87,13 @@ class AppEmptyState extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha:0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
                 size: 40,
-                color: AppColors.primary.withOpacity(0.5),
+                color: AppColors.primary.withValues(alpha:0.5),
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -150,7 +150,7 @@ class AppErrorState extends StatelessWidget {
             Icon(
               Icons.error_outline,
               size: 64,
-              color: AppColors.error.withOpacity(0.5),
+              color: AppColors.error.withValues(alpha:0.5),
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
@@ -200,7 +200,7 @@ class GenderBadge extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: RadialGradient(
-          colors: [bgColor, bgColor.withOpacity(0.3)],
+          colors: [bgColor, bgColor.withValues(alpha:0.3)],
         ),
       ),
       child: Center(

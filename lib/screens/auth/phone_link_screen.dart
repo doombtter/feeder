@@ -412,7 +412,7 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,7 +443,7 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(Icons.phone_android_rounded, size: 28, color: AppColors.primary),
@@ -638,7 +638,7 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
+                        color: AppColors.primary.withValues(alpha:0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -678,7 +678,7 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
                       });
                     },
                     child: Text(
-                      _resendCooldown > 0 ? '${_resendCooldown}초 후 재전송 가능' : '인증번호 다시 받기',
+                      _resendCooldown > 0 ? '$_resendCooldown초 후 재전송 가능' : '인증번호 다시 받기',
                       style: TextStyle(
                         color: _resendCooldown > 0 ? AppColors.textTertiary : AppColors.primary,
                         fontSize: 14,
@@ -688,7 +688,7 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
                 ),
               ],
               
-              const Spacer(),
+              const SizedBox(height: 32),
               
               // 안내
               Container(

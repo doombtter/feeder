@@ -58,7 +58,7 @@ class VideoService {
   }) async {
     // 길이 체크
     if (duration > VideoQuotaConstants.maxVideoDurationSec) {
-      debugPrint('동영상 길이 초과: ${duration}초 (최대 ${VideoQuotaConstants.maxVideoDurationSec}초)');
+      debugPrint('동영상 길이 초과: $duration초 (최대 ${VideoQuotaConstants.maxVideoDurationSec}초)');
       return null;
     }
 

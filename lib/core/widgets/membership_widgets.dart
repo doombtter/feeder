@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../constants/app_constants.dart';
 
 /// 사용자 멤버십 등급
 enum MembershipTier {
@@ -36,9 +35,9 @@ extension MembershipTierExtension on MembershipTier {
       case MembershipTier.free:
         return const Color(0xFF27272A);
       case MembershipTier.premium:
-        return const Color(0xFF8B5CF6).withOpacity(0.15);
+        return const Color(0xFF8B5CF6).withValues(alpha:0.15);
       case MembershipTier.max:
-        return const Color(0xFFEC4899).withOpacity(0.15);
+        return const Color(0xFFEC4899).withValues(alpha:0.15);
     }
   }
 
@@ -72,8 +71,8 @@ extension MembershipTierExtension on MembershipTier {
 MembershipTier parseMembershipTier(Map<String, dynamic>? data) {
   if (data == null) return MembershipTier.free;
   
-  final isMax = data['isMax'] ?? false;
-  final isPremium = data['isPremium'] ?? false;
+  final isMax = data['isMax'] == true;
+  final isPremium = data['isPremium'] == true;
   
   if (isMax) return MembershipTier.max;
   if (isPremium) return MembershipTier.premium;
@@ -109,7 +108,7 @@ class MembershipBadge extends StatelessWidget {
           boxShadow: tier != MembershipTier.free
               ? [
                   BoxShadow(
-                    color: tier.color.withOpacity(0.3),
+                    color: tier.color.withValues(alpha:0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -129,11 +128,10 @@ class MembershipBadge extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 tier.displayName,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
-                  fontSize: size * 0.35,
                   fontWeight: FontWeight.bold,
-                ),
+                ).copyWith(fontSize: size * 0.35),
               ),
             ],
           ],
@@ -165,7 +163,7 @@ class MembershipIcon extends StatelessWidget {
           color: tier.backgroundColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: tier.color.withOpacity(0.5),
+            color: tier.color.withValues(alpha:0.5),
             width: 1.5,
           ),
         ),

@@ -5,7 +5,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../core/constants/app_constants.dart';
 import '../../main.dart' show AuthWrapper;
-import 'phone_link_screen.dart';
 
 /// 1단계: 소셜 로그인 화면 (필수)
 /// 
@@ -184,7 +183,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.3),
+                      color: AppColors.primary.withValues(alpha:0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),

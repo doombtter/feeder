@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/suspension_service.dart';
@@ -182,7 +181,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: AppColors.primary.withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
@@ -272,7 +271,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.3),
+                        color: AppColors.primary.withValues(alpha:0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -323,7 +322,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                         onPressed: _resendCooldown > 0 ? null : _resendOTP,
                         child: Text(
                           _resendCooldown > 0
-                              ? '${_resendCooldown}초 후 재전송 가능'
+                              ? '$_resendCooldown초 후 재전송 가능'
                               : '인증번호 다시 받기',
                           style: TextStyle(
                             color: _resendCooldown > 0

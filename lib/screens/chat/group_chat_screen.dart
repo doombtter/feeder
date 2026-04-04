@@ -29,7 +29,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final _scrollController = ScrollController();
   
   UserModel? _currentUser;
-  bool _isLoading = true;
   int _participantCount = 0;
 
   @override
@@ -51,7 +50,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (mounted) {
       setState(() {
         _currentUser = user;
-        _isLoading = false;
       });
     }
   }
@@ -177,7 +175,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: AppColors.primary.withOpacity(0.1),
+            color: AppColors.primary.withValues(alpha:0.1),
             child: Row(
               children: [
                 Icon(Icons.campaign_rounded, size: 18, color: AppColors.primary),
@@ -274,9 +272,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
+          color: AppColors.primary.withValues(alpha:0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+          border: Border.all(color: AppColors.primary.withValues(alpha:0.3)),
         ),
         child: Row(
           children: [
@@ -374,7 +372,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       bottomRight: isMe ? const Radius.circular(4) : null,
                       bottomLeft: !isMe ? const Radius.circular(4) : null,
                     ),
-                    border: isMe ? null : Border.all(color: AppColors.border.withOpacity(0.5)),
+                    border: isMe ? null : Border.all(color: AppColors.border.withValues(alpha:0.5)),
                   ),
                   child: Text(
                     content,
@@ -446,7 +444,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       decoration: BoxDecoration(
         color: AppColors.card,
         border: Border(
-          top: BorderSide(color: AppColors.border.withOpacity(0.3)),
+          top: BorderSide(color: AppColors.border.withValues(alpha:0.3)),
         ),
       ),
       child: Row(

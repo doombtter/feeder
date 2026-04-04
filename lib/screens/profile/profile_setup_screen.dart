@@ -319,7 +319,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.3),
+                      color: AppColors.primary.withValues(alpha:0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -456,7 +456,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.15) : AppColors.card,
+          color: isSelected ? color.withValues(alpha:0.15) : AppColors.card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? color : AppColors.border,

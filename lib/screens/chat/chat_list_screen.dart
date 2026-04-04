@@ -99,7 +99,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 separatorBuilder: (context, index) => Divider(
                   height: 1,
                   indent: 72,
-                  color: AppColors.border.withOpacity(0.3),
+                  color: AppColors.border.withValues(alpha:0.3),
                 ),
                 itemBuilder: (context, index) {
                   final room = chatRooms[index];
@@ -209,7 +209,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
             child: Row(
               children: [
@@ -269,7 +269,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
             child: Row(
               children: [
@@ -320,14 +320,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppColors.primary.withOpacity(0.15),
-                AppColors.primary.withOpacity(0.05),
+                AppColors.primary.withValues(alpha:0.15),
+                AppColors.primary.withValues(alpha:0.05),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+            border: Border.all(color: AppColors.primary.withValues(alpha:0.3)),
           ),
           child: Material(
             color: Colors.transparent,

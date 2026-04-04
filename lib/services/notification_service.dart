@@ -228,8 +228,6 @@ class NotificationService {
         return 'comment';
       case NotificationType.chatRequest:
         return 'chatRequest';
-      default:
-        return null; // 설정 없는 타입은 항상 발송
     }
   }
 

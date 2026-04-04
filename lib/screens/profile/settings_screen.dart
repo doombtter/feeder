@@ -310,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Column(children: children),
     );
@@ -321,7 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       height: 1,
       thickness: 1,
       indent: 64,
-      color: AppColors.border.withOpacity(0.3),
+      color: AppColors.border.withValues(alpha:0.3),
     );
   }
 
@@ -343,7 +343,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: (titleColor ?? AppColors.primary).withOpacity(0.1),
+                color: (titleColor ?? AppColors.primary).withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child:
@@ -399,7 +399,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.textSecondary.withOpacity(0.1),
+              color: AppColors.textSecondary.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: AppColors.textSecondary, size: 18),
@@ -444,7 +444,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -783,7 +783,7 @@ class _NotificationSettingsScreenState
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(16),
                     border:
-                        Border.all(color: AppColors.border.withOpacity(0.5)),
+                        Border.all(color: AppColors.border.withValues(alpha:0.5)),
                   ),
                   child: Column(
                     children: [
@@ -843,7 +843,7 @@ class _NotificationSettingsScreenState
       height: 1,
       thickness: 1,
       indent: 64,
-      color: AppColors.border.withOpacity(0.3),
+      color: AppColors.border.withValues(alpha:0.3),
     );
   }
 
@@ -864,7 +864,7 @@ class _NotificationSettingsScreenState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -938,9 +938,9 @@ class AppPolicyScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+              border: Border.all(color: AppColors.primary.withValues(alpha:0.3)),
             ),
             child: Row(
               children: [
@@ -1011,7 +1011,7 @@ class AppPolicyScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1049,7 +1049,7 @@ class AppPolicyScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1062,7 +1062,7 @@ class AppPolicyScreen extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: AppColors.primary, size: 18),
@@ -1079,7 +1079,7 @@ class AppPolicyScreen extends StatelessWidget {
               ],
             ),
           ),
-          Divider(height: 1, color: AppColors.border.withOpacity(0.3)),
+          Divider(height: 1, color: AppColors.border.withValues(alpha:0.3)),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

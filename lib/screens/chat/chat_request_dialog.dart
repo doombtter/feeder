@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
 import '../../services/chat_service.dart';
@@ -129,7 +128,7 @@ class _ChatRequestDialogState extends State<ChatRequestDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha:0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primary, size: 22),
@@ -154,7 +153,7 @@ class _ChatRequestDialogState extends State<ChatRequestDialog> {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                  border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
                 ),
                 child: Row(
                   children: [
@@ -200,19 +199,19 @@ class _ChatRequestDialogState extends State<ChatRequestDialog> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              AppColors.success.withOpacity(0.1),
-                              AppColors.success.withOpacity(0.05),
+                              AppColors.success.withValues(alpha:0.1),
+                              AppColors.success.withValues(alpha:0.05),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.success.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.success.withValues(alpha:0.3)),
                         ),
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: AppColors.success.withOpacity(0.2),
+                                color: AppColors.success.withValues(alpha:0.2),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(Icons.card_giftcard_rounded, color: AppColors.success, size: 18),
@@ -265,19 +264,19 @@ class _ChatRequestDialogState extends State<ChatRequestDialog> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              AppColors.primary.withOpacity(0.1),
-                              AppColors.primaryLight.withOpacity(0.05),
+                              AppColors.primary.withValues(alpha:0.1),
+                              AppColors.primaryLight.withValues(alpha:0.05),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                          border: Border.all(color: AppColors.primary.withValues(alpha:0.2)),
                         ),
                         child: Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.2),
+                                color: AppColors.primary.withValues(alpha:0.2),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(Icons.monetization_on_rounded, color: AppColors.primary, size: 18),
@@ -310,7 +309,7 @@ class _ChatRequestDialogState extends State<ChatRequestDialog> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.error.withOpacity(0.1),
+                                  color: AppColors.error.withValues(alpha:0.1),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: const Text(

@@ -263,10 +263,10 @@ class _NotificationGroupItem extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
-          color: hasUnread ? AppColors.primary.withOpacity(0.08) : AppColors.card,
+          color: hasUnread ? AppColors.primary.withValues(alpha:0.08) : AppColors.card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: hasUnread ? AppColors.primary.withOpacity(0.3) : AppColors.border.withOpacity(0.5),
+            color: hasUnread ? AppColors.primary.withValues(alpha:0.3) : AppColors.border.withValues(alpha:0.5),
           ),
         ),
         child: InkWell(
@@ -283,7 +283,7 @@ class _NotificationGroupItem extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: _getIconColor(notification.type).withOpacity(0.15),
+                        color: _getIconColor(notification.type).withValues(alpha:0.15),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(

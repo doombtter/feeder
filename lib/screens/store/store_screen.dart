@@ -218,7 +218,7 @@ class _StoreScreenState extends State<StoreScreen>
           unselectedLabelColor: AppColors.textTertiary,
           indicatorColor: AppColors.primary,
           indicatorSize: TabBarIndicatorSize.label,
-          dividerColor: AppColors.border.withOpacity(0.5),
+          dividerColor: AppColors.border.withValues(alpha:0.5),
           tabs: const [
             Tab(text: '포인트'),
             Tab(text: '프리미엄'),
@@ -285,7 +285,7 @@ class _StoreScreenState extends State<StoreScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
+                  color: AppColors.primary.withValues(alpha:0.3),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
@@ -299,7 +299,7 @@ class _StoreScreenState extends State<StoreScreen>
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha:0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.diamond_rounded, color: Colors.white, size: 24),
@@ -317,7 +317,7 @@ class _StoreScreenState extends State<StoreScreen>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha:0.2),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -368,7 +368,7 @@ class _StoreScreenState extends State<StoreScreen>
                 Text(
                   '매일 자정에 무료 채팅 ${MembershipBenefits.getDailyFreeChats(_membershipTier)}회가 충전돼요',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha:0.7),
                     fontSize: 12,
                   ),
                 ),
@@ -453,7 +453,7 @@ class _StoreScreenState extends State<StoreScreen>
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,7 +490,7 @@ class _StoreScreenState extends State<StoreScreen>
           color: AppColors.card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isClaimed ? AppColors.border.withOpacity(0.3) : AppColors.primary.withOpacity(0.5),
+            color: isClaimed ? AppColors.border.withValues(alpha:0.3) : AppColors.primary.withValues(alpha:0.5),
           ),
         ),
         child: Row(
@@ -499,7 +499,7 @@ class _StoreScreenState extends State<StoreScreen>
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
+                color: iconColor.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: iconColor, size: 26),
@@ -582,7 +582,7 @@ class _StoreScreenState extends State<StoreScreen>
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: _membershipTier.color.withOpacity(0.3),
+                    color: _membershipTier.color.withValues(alpha:0.3),
                     blurRadius: 16,
                     offset: const Offset(0, 6),
                   ),
@@ -593,7 +593,7 @@ class _StoreScreenState extends State<StoreScreen>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha:0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(_membershipTier.icon, color: Colors.white, size: 24),
@@ -626,14 +626,14 @@ class _StoreScreenState extends State<StoreScreen>
               decoration: BoxDecoration(
                 color: AppColors.card,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
               ),
               child: Column(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: MembershipTier.premium.color.withOpacity(0.1),
+                      color: MembershipTier.premium.color.withValues(alpha:0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -753,7 +753,7 @@ class _StoreScreenState extends State<StoreScreen>
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -793,7 +793,7 @@ class _StoreScreenState extends State<StoreScreen>
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Row(
         children: [
@@ -801,7 +801,7 @@ class _StoreScreenState extends State<StoreScreen>
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: AppColors.primary, size: 22),
@@ -849,7 +849,7 @@ class _StoreScreenState extends State<StoreScreen>
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isPopular ? AppColors.primary : AppColors.border.withOpacity(0.5),
+          color: isPopular ? AppColors.primary : AppColors.border.withValues(alpha:0.5),
           width: isPopular ? 2 : 1,
         ),
       ),
@@ -971,7 +971,7 @@ class _StoreScreenState extends State<StoreScreen>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: maxColor.withOpacity(0.3),
+                  color: maxColor.withValues(alpha:0.3),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
@@ -982,7 +982,7 @@ class _StoreScreenState extends State<StoreScreen>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha:0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.diamond_rounded, color: Colors.white, size: 40),
@@ -1142,7 +1142,7 @@ class _StoreScreenState extends State<StoreScreen>
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1174,10 +1174,10 @@ class _StoreScreenState extends State<StoreScreen>
 
     if (isIncluded) {
       iconColor = AppColors.success;
-      bgColor = AppColors.success.withOpacity(0.1);
+      bgColor = AppColors.success.withValues(alpha:0.1);
     } else {
       iconColor = maxColor;
-      bgColor = maxColor.withOpacity(0.1);
+      bgColor = maxColor.withValues(alpha:0.1);
     }
 
     return Container(
@@ -1187,7 +1187,7 @@ class _StoreScreenState extends State<StoreScreen>
         color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isExclusive ? maxColor.withOpacity(0.4) : AppColors.border.withOpacity(0.5),
+          color: isExclusive ? maxColor.withValues(alpha:0.4) : AppColors.border.withValues(alpha:0.5),
         ),
       ),
       child: Row(
@@ -1262,10 +1262,10 @@ class _StoreScreenState extends State<StoreScreen>
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isPopular ? maxColor.withOpacity(0.1) : AppColors.card,
+          color: isPopular ? maxColor.withValues(alpha:0.1) : AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isPopular ? maxColor : AppColors.border.withOpacity(0.5),
+            color: isPopular ? maxColor : AppColors.border.withValues(alpha:0.5),
             width: isPopular ? 2 : 1,
           ),
         ),
@@ -1359,7 +1359,7 @@ class _PointProductCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1369,7 +1369,7 @@ class _PointProductCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFFFD700).withOpacity(0.1),
+                color: const Color(0xFFFFD700).withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.diamond_rounded, color: Color(0xFFFFD700), size: 26),
@@ -1570,7 +1570,7 @@ class _PolicyRewardScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1579,7 +1579,7 @@ class _PolicyRewardScreen extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
+              color: AppColors.primary.withValues(alpha:0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: AppColors.primary, size: 20),

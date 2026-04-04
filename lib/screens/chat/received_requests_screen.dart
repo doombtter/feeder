@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
 import '../../models/chat_request_model.dart';
-import '../../models/user_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/user_service.dart';
 import '../profile/user_profile_screen.dart';
@@ -126,7 +125,7 @@ class _RequestCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -306,8 +305,8 @@ class _RequestCard extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: LinearGradient(
           colors: isMale 
-            ? [AppColors.male.withOpacity(0.3), AppColors.male.withOpacity(0.1)]
-            : [AppColors.female.withOpacity(0.3), AppColors.female.withOpacity(0.1)],
+            ? [AppColors.male.withValues(alpha:0.3), AppColors.male.withValues(alpha:0.1)]
+            : [AppColors.female.withValues(alpha:0.3), AppColors.female.withValues(alpha:0.1)],
         ),
       ),
       padding: const EdgeInsets.all(2),

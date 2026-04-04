@@ -1,13 +1,10 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:flutter_sound/flutter_sound.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/voice/voice.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -23,47 +20,18 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
   final _contentController = TextEditingController();
   final _postService = PostService();
   final _userService = UserService();
+  final _voiceController = VoiceRecordingController(
+    maxDurationSeconds: 60,
+    filePrefix: 'post_voice',
+  );
+  
   File? _selectedImage;
   bool _isLoading = false;
-
-  // 음성 녹음 - ValueNotifier로 프레임 드롭 방지
-  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
-  final FlutterSoundPlayer _player = FlutterSoundPlayer();
-  bool _isRecorderInitialized = false;
-  bool _isPlayerInitialized = false;
-  final ValueNotifier<bool> _isRecordingNotifier = ValueNotifier(false);
-  final ValueNotifier<bool> _isPlayingNotifier = ValueNotifier(false);
-  final ValueNotifier<int> _recordDurationNotifier = ValueNotifier(0);
-  Timer? _recordTimer;
-  String? _recordPath;
-  int? _voiceDuration;
-
-  @override
-  void initState() {
-    super.initState();
-    _initAudio();
-  }
-
-  Future<void> _initAudio() async {
-    try {
-      await _recorder.openRecorder();
-      _isRecorderInitialized = true;
-      await _player.openPlayer();
-      _isPlayerInitialized = true;
-    } catch (e) {
-      debugPrint('Audio init error: $e');
-    }
-  }
 
   @override
   void dispose() {
     _contentController.dispose();
-    _recordTimer?.cancel();
-    _isRecordingNotifier.dispose();
-    _isPlayingNotifier.dispose();
-    _recordDurationNotifier.dispose();
-    if (_isRecorderInitialized) _recorder.closeRecorder();
-    if (_isPlayerInitialized) _player.closePlayer();
+    _voiceController.dispose();
     super.dispose();
   }
 
@@ -107,116 +75,18 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
   }
 
   Future<void> _startRecording() async {
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('마이크 권한이 필요합니다')),
-        );
-      }
-      return;
-    }
-
-    if (!_isRecorderInitialized) {
-      await _initAudio();
-    }
-
-    try {
-      final dir = await getTemporaryDirectory();
-      _recordPath = '${dir.path}/post_voice_${DateTime.now().millisecondsSinceEpoch}.aac';
-
-      await _recorder.startRecorder(
-        toFile: _recordPath,
-        codec: Codec.aacADTS,
-      );
-
-      _recordDurationNotifier.value = 0;
-      _isRecordingNotifier.value = true;
-
-      _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        _recordDurationNotifier.value++;
-        if (_recordDurationNotifier.value >= 60) {
-          _stopRecording();
-        }
-      });
-    } catch (e) {
+    final success = await _voiceController.startRecording();
+    if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('녹음 시작 실패: $e')),
+        const SnackBar(content: Text('마이크 권한이 필요합니다')),
       );
     }
-  }
-
-  Future<void> _stopRecording() async {
-    _recordTimer?.cancel();
-
-    try {
-      await _recorder.stopRecorder();
-
-      if (_recordPath != null && _recordDurationNotifier.value >= 1) {
-        _voiceDuration = _recordDurationNotifier.value;
-        _isRecordingNotifier.value = false;
-      } else {
-        _isRecordingNotifier.value = false;
-      }
-    } catch (e) {
-      _isRecordingNotifier.value = false;
-    }
-  }
-
-  Future<void> _cancelRecording() async {
-    _recordTimer?.cancel();
-    await _recorder.stopRecorder();
-
-    if (_recordPath != null) {
-      try {
-        await File(_recordPath!).delete();
-      } catch (_) {}
-    }
-
-    _isRecordingNotifier.value = false;
-    _recordDurationNotifier.value = 0;
-    _recordPath = null;
-  }
-
-  void _removeVoice() {
-    if (_recordPath != null) {
-      try {
-        File(_recordPath!).delete();
-      } catch (_) {}
-    }
-    setState(() {
-      _recordPath = null;
-      _voiceDuration = null;
-    });
-  }
-
-  Future<void> _playPauseVoice() async {
-    if (!_isPlayerInitialized || _recordPath == null) return;
-
-    if (_isPlayingNotifier.value) {
-      await _player.stopPlayer();
-      _isPlayingNotifier.value = false;
-    } else {
-      _isPlayingNotifier.value = true;
-      await _player.startPlayer(
-        fromURI: _recordPath,
-        whenFinished: () {
-          _isPlayingNotifier.value = false;
-        },
-      );
-    }
-  }
-
-  String _formatDuration(int seconds) {
-    final min = seconds ~/ 60;
-    final sec = seconds % 60;
-    return '$min:${sec.toString().padLeft(2, '0')}';
   }
 
   Future<void> _submitPost() async {
     final content = _contentController.text.trim();
 
-    if (content.isEmpty && _selectedImage == null && _recordPath == null) {
+    if (content.isEmpty && _selectedImage == null && !_voiceController.hasRecording) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('내용을 입력해주세요')),
       );
@@ -239,9 +109,11 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
       }
 
       String? voiceUrl;
-      if (_recordPath != null) {
+      int? voiceDuration;
+      if (_voiceController.hasRecording && _voiceController.recordPath != null) {
+        voiceDuration = _voiceController.duration;
         voiceUrl = await S3Service.uploadVoice(
-          File(_recordPath!),
+          File(_voiceController.recordPath!),
           chatRoomId: 'posts',
         );
       }
@@ -252,23 +124,23 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
         content: content,
         imageUrl: imageUrl,
         voiceUrl: voiceUrl,
-        voiceDuration: _voiceDuration,
+        voiceDuration: voiceDuration,
       );
 
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('게시글이 작성되었습니다')),
+          const SnackBar(content: Text('게시글이 등록되었습니다')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('오류: $e')),
-      );
-    } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('게시글 등록 실패: $e')),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -277,26 +149,13 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('글쓰기'),
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: const Icon(Icons.close_rounded, size: 16),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
+        title: const Text('글 작성'),
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            padding: const EdgeInsets.only(right: 8),
             child: GestureDetector(
               onTap: _isLoading ? null : _submitPost,
               child: Container(
@@ -328,18 +187,19 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
       ),
       body: Column(
         children: [
+          // 안내 배너
           Container(
             padding: const EdgeInsets.all(12),
             margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border.withOpacity(0.5)),
+              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
             ),
-            child: Row(
+            child: const Row(
               children: [
                 Icon(Icons.visibility_off_rounded, size: 18, color: AppColors.textTertiary),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   '익명으로 게시됩니다. 성별만 표시돼요.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
@@ -347,6 +207,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
               ],
             ),
           ),
+          // 본문
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -359,7 +220,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
                     maxLines: null,
                     minLines: 8,
                     style: const TextStyle(fontSize: 16, height: 1.5, color: AppColors.textPrimary),
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       hintText: '무슨 생각을 하고 계신가요?',
                       hintStyle: TextStyle(color: AppColors.textHint),
                       border: InputBorder.none,
@@ -367,6 +228,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
+                  // 선택된 이미지
                   if (_selectedImage != null) ...[
                     const SizedBox(height: 16),
                     Stack(
@@ -387,7 +249,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
                             onTap: _removeImage,
                             child: Container(
                               padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 color: AppColors.overlay,
                                 shape: BoxShape.circle,
                               ),
@@ -398,55 +260,26 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
                       ],
                     ),
                   ],
-                  // 녹음된 음성 (미리듣기 포함)
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _isRecordingNotifier,
-                    builder: (context, isRecording, _) {
-                      if (_recordPath == null || isRecording) return const SizedBox.shrink();
+                  // 녹음된 음성 미리듣기
+                  ListenableBuilder(
+                    listenable: _voiceController,
+                    builder: (context, _) {
+                      if (_voiceController.state == VoiceRecordingState.recording) {
+                        return const SizedBox.shrink();
+                      }
+                      if (!_voiceController.hasRecording) {
+                        return const SizedBox.shrink();
+                      }
                       return Column(
                         children: [
                           const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.border.withOpacity(0.5)),
-                            ),
-                            child: Row(
-                              children: [
-                                ValueListenableBuilder<bool>(
-                                  valueListenable: _isPlayingNotifier,
-                                  builder: (context, isPlaying, _) {
-                                    return GestureDetector(
-                                      onTap: _playPauseVoice,
-                                      child: Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.primary,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          isPlaying ? Icons.pause : Icons.play_arrow,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  '음성 메시지 ${_formatDuration(_voiceDuration ?? 0)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.textPrimary),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: _removeVoice,
-                                  child: Icon(Icons.close, color: AppColors.textTertiary),
-                                ),
-                              ],
+                          VoicePreviewCompact(
+                            controller: _voiceController,
+                            style: const VoiceRecordingStyle(
+                              primaryColor: AppColors.primary,
+                              backgroundColor: AppColors.card,
+                              textColor: AppColors.textPrimary,
+                              secondaryTextColor: AppColors.textTertiary,
                             ),
                           ),
                         ],
@@ -457,17 +290,21 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
               ),
             ),
           ),
+          // 하단 툴바
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.card,
-              border: Border(top: BorderSide(color: AppColors.border.withOpacity(0.5))),
+              border: Border(top: BorderSide(color: AppColors.border.withValues(alpha:0.5))),
             ),
             child: SafeArea(
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _isRecordingNotifier,
-                builder: (context, isRecording, _) {
-                  return isRecording ? _buildRecordingUI() : _buildToolbar();
+              child: ListenableBuilder(
+                listenable: _voiceController,
+                builder: (context, _) {
+                  if (_voiceController.state == VoiceRecordingState.recording) {
+                    return _buildRecordingUI();
+                  }
+                  return _buildToolbar();
                 },
               ),
             ),
@@ -493,7 +330,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
         const Spacer(),
         Text(
           '${_contentController.text.length}/500',
-          style: TextStyle(color: AppColors.textTertiary, fontSize: 14),
+          style: const TextStyle(color: AppColors.textTertiary, fontSize: 14),
         ),
       ],
     );
@@ -503,7 +340,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
     return Row(
       children: [
         IconButton(
-          onPressed: _cancelRecording,
+          onPressed: _voiceController.cancelRecording,
           icon: const Icon(Icons.close, color: AppColors.error),
         ),
         Expanded(
@@ -519,22 +356,26 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              ValueListenableBuilder<int>(
-                valueListenable: _recordDurationNotifier,
-                builder: (context, duration, _) {
+              ListenableBuilder(
+                listenable: _voiceController,
+                builder: (context, _) {
                   return Text(
-                    _formatDuration(duration),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                    _voiceController.formattedDuration,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
                   );
                 },
               ),
               const SizedBox(width: 8),
-              Text('녹음 중...', style: TextStyle(color: AppColors.textTertiary)),
+              const Text('녹음 중...', style: TextStyle(color: AppColors.textTertiary)),
             ],
           ),
         ),
         IconButton(
-          onPressed: _stopRecording,
+          onPressed: _voiceController.stopRecording,
           icon: const Icon(Icons.check, color: AppColors.primary),
         ),
       ],

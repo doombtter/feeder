@@ -10,10 +10,8 @@ import '../../core/widgets/common_widgets.dart';
 import '../../core/widgets/membership_widgets.dart';
 import '../../models/post_model.dart';
 import '../../models/report_model.dart';
-import '../../models/user_model.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
-import '../../services/report_service.dart';
 import '../../services/chat_service.dart';
 import '../../services/notification_service.dart';
 import 'post_detail_screen.dart';
@@ -24,7 +22,6 @@ import '../chat/chat_list_screen.dart';
 import '../chat/chat_request_dialog.dart';
 import '../shots/shots_screen.dart';
 import '../../core/widgets/ad_widgets.dart';
-import '../../services/admob_service.dart';
 import '../common/report_dialog.dart';
 import '../notification/notifications_screen.dart';
 import '../discover/recent_users_screen.dart';
@@ -178,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Icons.phone_rounded,
                         size: 20,
                         color: _isSuspended 
-                            ? AppColors.textTertiary.withOpacity(0.4)
+                            ? AppColors.textTertiary.withValues(alpha:0.4)
                             : Colors.white,
                       ),
                       onPressed: _isSuspended ? null : () {
@@ -206,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Icons.people_outline_rounded, 
                         size: 22,
                         color: _isSuspended 
-                            ? AppColors.textTertiary.withOpacity(0.4)
+                            ? AppColors.textTertiary.withValues(alpha:0.4)
                             : AppColors.textSecondary,
                       ),
                       onPressed: _isSuspended ? null : () {
@@ -241,7 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Icons.notifications_outlined, 
                                   size: 22,
                                   color: _isSuspended 
-                                      ? AppColors.textTertiary.withOpacity(0.4)
+                                      ? AppColors.textTertiary.withValues(alpha:0.4)
                                       : AppColors.textSecondary,
                                 ),
                                 onPressed: _isSuspended ? null : () {
@@ -284,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.4),
+                      color: AppColors.primary.withValues(alpha:0.4),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -323,7 +320,7 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: AppColors.background,
             border: Border(
-              top: BorderSide(color: AppColors.border.withOpacity(0.5), width: 0.5),
+              top: BorderSide(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
             ),
           ),
           child: SafeArea(
@@ -396,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
         width: 64,
         height: 48,
         decoration: BoxDecoration(
-          color: isActive ? AppColors.primary.withOpacity(0.15) : Colors.transparent,
+          color: isActive ? AppColors.primary.withValues(alpha:0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Stack(
@@ -405,7 +402,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Icon(
               isActive ? activeIcon : icon,
               color: isDisabled 
-                  ? AppColors.textTertiary.withOpacity(0.4)
+                  ? AppColors.textTertiary.withValues(alpha:0.4)
                   : (isActive ? AppColors.primary : AppColors.textTertiary),
               size: 26,
             ),
@@ -636,7 +633,6 @@ class _PostCard extends StatefulWidget {
 
 class _PostCardState extends State<_PostCard> {
   final _postService = PostService();
-  final _reportService = ReportService();
   final _userService = UserService();
   bool _isWarded = false;
   int _wardCount = 0;
@@ -746,7 +742,7 @@ class _PostCardState extends State<_PostCard> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: MembershipTier.max.color.withOpacity(0.1),
+                color: MembershipTier.max.color.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -814,7 +810,7 @@ class _PostCardState extends State<_PostCard> {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border.withOpacity(0.5), width: 0.5),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
       ),
       child: InkWell(
         onTap: widget.onTap,
@@ -853,7 +849,7 @@ class _PostCardState extends State<_PostCard> {
                             Icon(
                               Icons.visibility_rounded,
                               size: 12,
-                              color: MembershipTier.max.color.withOpacity(0.7),
+                              color: MembershipTier.max.color.withValues(alpha:0.7),
                             ),
                           ],
                           const SizedBox(width: 8),
@@ -957,7 +953,7 @@ class _PostCardState extends State<_PostCard> {
                   bottomRight: Radius.circular(AppRadius.lg),
                 ),
                 border: Border(
-                  top: BorderSide(color: AppColors.border.withOpacity(0.3), width: 0.5),
+                  top: BorderSide(color: AppColors.border.withValues(alpha:0.3), width: 0.5),
                 ),
               ),
               child: Row(

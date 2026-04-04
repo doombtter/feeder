@@ -37,7 +37,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   // Agora RTC Engine
   RtcEngine? _engine;
-  bool _isEngineInitialized = false;
 
   // UI 상태
   bool _isMuted = false;
@@ -186,8 +185,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           clientRoleType: ClientRoleType.clientRoleBroadcaster,
         ),
       );
-
-      if (mounted) setState(() => _isEngineInitialized = true);
 
     } catch (e) {
       debugPrint('❌ Agora 초기화 실패: $e');
@@ -383,7 +380,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       
       // 채팅 요청 보내기
       final result = await _chatService.sendChatRequest(
-        fromUserId: _currentUid!,
+        fromUserId: _currentUid,
         toUserId: widget.partnerUid,
         fromUser: myUser,
         message: '랜덤 전화에서 만났어요 👋',
@@ -580,14 +577,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.7)),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withValues(alpha:0.7)),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '상대방 대기 중...',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha:0.7),
                   fontSize: 14,
                 ),
               ),
@@ -602,14 +599,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withOpacity(0.7)),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white.withValues(alpha:0.7)),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '연결 중...',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha:0.7),
                   fontSize: 14,
                 ),
               ),
@@ -632,7 +629,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         // 남은 시간 표시 (1분 이하일 때)
         if (isWarning)
           Text(
-            '${remainingSeconds}초 남음',
+            '$remainingSeconds초 남음',
             style: const TextStyle(
               color: AppColors.warning,
               fontSize: 14,
@@ -644,7 +641,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           Text(
             '최대 10분',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
+              color: Colors.white.withValues(alpha:0.5),
               fontSize: 12,
             ),
           ),
@@ -707,7 +704,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.2),
+              color: isActive ? Colors.white : Colors.white.withValues(alpha:0.2),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -720,7 +717,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha:0.7),
               fontSize: 12,
             ),
           ),

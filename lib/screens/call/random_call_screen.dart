@@ -27,7 +27,6 @@ class _RandomCallScreenState extends State<RandomCallScreen>
   bool _isLoading = true;
   bool _isMatching = false;
   int _remainingCalls = 0;
-  int _usedCalls = 0;
   int _dailyLimit = 1;
   String _myGender = 'male';
   String _myNickname = '익명';
@@ -122,7 +121,6 @@ class _RandomCallScreenState extends State<RandomCallScreen>
     if (mounted) {
       setState(() {
         _remainingCalls = quota.remaining;
-        _usedCalls = quota.used;
         _isLoading = false;
       });
     }
@@ -361,14 +359,14 @@ class _RandomCallScreenState extends State<RandomCallScreen>
                   height: 160,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [AppColors.primary, AppColors.primary.withOpacity(0.7)],
+                      colors: [AppColors.primary, AppColors.primary.withValues(alpha:0.7)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.4),
+                        color: AppColors.primary.withValues(alpha:0.4),
                         blurRadius: 30,
                         spreadRadius: 5,
                       ),
@@ -413,12 +411,12 @@ class _RandomCallScreenState extends State<RandomCallScreen>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: _waitingCount > 0 
-                  ? AppColors.success.withOpacity(0.1) 
+                  ? AppColors.success.withValues(alpha:0.1) 
                   : AppColors.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: _waitingCount > 0 
-                    ? AppColors.success.withOpacity(0.3)
+                    ? AppColors.success.withValues(alpha:0.3)
                     : AppColors.border,
               ),
             ),
@@ -479,7 +477,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${_matchingSeconds}초',
+                    '$_matchingSeconds초',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -534,7 +532,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
       ),
       child: Column(
         children: [

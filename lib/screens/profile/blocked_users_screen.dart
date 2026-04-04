@@ -148,7 +148,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.card,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.border.withOpacity(0.5)),
+                        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(

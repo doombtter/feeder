@@ -13,7 +13,6 @@ import '../../models/comment_model.dart';
 import '../../models/report_model.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
-import '../../services/report_service.dart';
 import '../../services/s3_service.dart';
 import '../chat/chat_request_dialog.dart';
 import '../common/report_dialog.dart';
@@ -32,12 +31,13 @@ class PostDetailScreen extends StatefulWidget {
 class _PostDetailScreenState extends State<PostDetailScreen> {
   final _postService = PostService();
   final _userService = UserService();
-  final _reportService = ReportService();
   bool _isWarded = false;
   int _wardCount = 0;
   MembershipTier _membershipTier = MembershipTier.free;
   
   CommentModel? _replyingTo;
+
+  bool _isPremium = false;
 
   @override
   void initState() {
@@ -61,6 +61,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           _membershipTier = user.isMax 
               ? MembershipTier.max 
               : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
+        _isPremium = user.isPremium || user.isMax;
         });
       }
     }
@@ -370,10 +371,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                   ),
 
-                  Divider(height: 1, color: AppColors.border.withOpacity(0.3)),
+                  Divider(height: 1, color: AppColors.border.withValues(alpha:0.3)),
 
                   // 게시글과 댓글 사이 네이티브 광고
-                  const NativeAdWidget(),
+                  
+                  if (!_isPremium) const NativeAdWidget(),
 
                   // 댓글 섹션
                   Padding(
@@ -799,7 +801,7 @@ class _CommentInputWidgetState extends State<_CommentInputWidget> {
           decoration: BoxDecoration(
             color: AppColors.card,
             border: Border(
-              top: BorderSide(color: AppColors.border.withOpacity(0.5)),
+              top: BorderSide(color: AppColors.border.withValues(alpha:0.5)),
             ),
           ),
           child: SafeArea(
@@ -1021,7 +1023,7 @@ class _CommentItemState extends State<_CommentItem> {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.primary.withValues(alpha:0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -1134,7 +1136,7 @@ class _CommentItemState extends State<_CommentItem> {
                           child: Text(
                             '삭제',
                             style: TextStyle(
-                              color: AppColors.error.withOpacity(0.7),
+                              color: AppColors.error.withValues(alpha:0.7),
                               fontSize: 12,
                             ),
                           ),
