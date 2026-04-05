@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -37,7 +38,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _scrollController = ScrollController();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
 
-  List<MessageModel> _cachedMessages = [];
+  // 페이지네이션 관련
+  List<MessageModel> _messages = [];
+  bool _isLoadingMore = false;
+  bool _hasMoreMessages = true;
+  DateTime? _oldestMessageTime;
+  DateTime? _newestMessageTime;
+  StreamSubscription<List<MessageModel>>? _newMessagesSubscription;
   
   String? _otherUserId;
   bool _isOtherPremium = false;
@@ -48,6 +55,86 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.initState();
     _chatService.markAsRead(widget.chatRoomId, _uid);
     _loadMembershipInfo();
+    _loadInitialMessages();
+    _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadInitialMessages() async {
+    final messages = await _chatService.getInitialMessages(widget.chatRoomId);
+    
+    if (mounted) {
+      setState(() {
+        _messages = messages;
+        _hasMoreMessages = messages.length >= ChatService.messagesPerPage;
+        if (messages.isNotEmpty) {
+          _oldestMessageTime = messages.first.createdAt;
+          _newestMessageTime = messages.last.createdAt;
+        }
+      });
+      
+      // 새 메시지 실시간 리스닝 시작
+      _startListeningNewMessages();
+    }
+  }
+
+  void _startListeningNewMessages() {
+    if (_newestMessageTime == null) {
+      _newestMessageTime = DateTime.now();
+    }
+    
+    _newMessagesSubscription?.cancel();
+    _newMessagesSubscription = _chatService
+        .getNewMessages(widget.chatRoomId, _newestMessageTime!)
+        .listen((newMessages) {
+      if (newMessages.isNotEmpty && mounted) {
+        setState(() {
+          // 중복 제거 후 추가
+          for (final msg in newMessages) {
+            if (!_messages.any((m) => m.id == msg.id)) {
+              _messages.add(msg);
+            }
+          }
+          _newestMessageTime = _messages.last.createdAt;
+        });
+        
+        // 새 메시지 읽음 처리
+        _chatService.markAsRead(widget.chatRoomId, _uid);
+      }
+    });
+  }
+
+  void _onScroll() {
+    // 상단에 도달하면 이전 메시지 로드
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 100) {
+      _loadMoreMessages();
+    }
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (_isLoadingMore || !_hasMoreMessages || _oldestMessageTime == null) return;
+
+    setState(() => _isLoadingMore = true);
+
+    final olderMessages = await _chatService.getMoreMessages(
+      widget.chatRoomId,
+      beforeTime: _oldestMessageTime!,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isLoadingMore = false;
+        if (olderMessages.isEmpty) {
+          _hasMoreMessages = false;
+        } else {
+          // 중복 제거 후 앞에 추가
+          final existingIds = _messages.map((m) => m.id).toSet();
+          final newMessages = olderMessages.where((m) => !existingIds.contains(m.id)).toList();
+          _messages.insertAll(0, newMessages);
+          _oldestMessageTime = _messages.first.createdAt;
+          _hasMoreMessages = olderMessages.length >= ChatService.messagesPerPage;
+        }
+      });
+    }
   }
 
   Future<void> _loadMembershipInfo() async {
@@ -80,7 +167,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _newMessagesSubscription?.cancel();
     super.dispose();
   }
 
@@ -109,58 +198,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           body: Column(
             children: [
               Expanded(
-                child: StreamBuilder<List<MessageModel>>(
-                  stream: _chatService.getMessages(widget.chatRoomId),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting && _cachedMessages.isEmpty) {
-                      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-                    }
-
-                    if (snapshot.hasData) _cachedMessages = snapshot.data!;
-                    final messages = _cachedMessages;
-
-                    if (messages.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: const BoxDecoration(color: AppColors.card, shape: BoxShape.circle),
-                              child: const Icon(Icons.chat_bubble_outline_rounded, size: 40, color: AppColors.textTertiary),
-                            ),
-                            const SizedBox(height: 16),
-                            const Text('대화를 시작해보세요', style: TextStyle(color: AppColors.textSecondary, fontSize: 15)),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: messages.length,
-                      itemBuilder: (context, index) {
-                        final reversedIndex = messages.length - 1 - index;
-                        final message = messages[reversedIndex];
-                        final isMe = message.senderId == _uid;
-
-                        Widget? dateDivider;
-                        if (reversedIndex == 0 || !_isSameDay(messages[reversedIndex - 1].createdAt, message.createdAt)) {
-                          dateDivider = _buildDateDivider(message.createdAt);
-                        }
-
-                        return Column(
-                          children: [
-                            if (dateDivider != null) dateDivider,
-                            MessageBubble(message: message, isMe: isMe),
-                          ],
-                        );
-                      },
-                    );
-                  },
-                ),
+                child: _buildMessageList(),
               ),
               // 입력 바
               ChatInputBar(
@@ -172,6 +210,61 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageList() {
+    if (_messages.isEmpty && !_isLoadingMore) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(color: AppColors.card, shape: BoxShape.circle),
+              child: const Icon(Icons.chat_bubble_outline_rounded, size: 40, color: AppColors.textTertiary),
+            ),
+            const SizedBox(height: 16),
+            const Text('대화를 시작해보세요', style: TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+          ],
+        ),
+      );
+    }
+
+    final messages = _messages;
+    
+    return ListView.builder(
+      controller: _scrollController,
+      reverse: true,
+      padding: const EdgeInsets.all(16),
+      itemCount: messages.length + (_isLoadingMore || _hasMoreMessages ? 1 : 0),
+      itemBuilder: (context, index) {
+        // 로딩 인디케이터 (맨 위에 표시)
+        if (index == messages.length) {
+          return _isLoadingMore
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)),
+                )
+              : const SizedBox.shrink();
+        }
+
+        final reversedIndex = messages.length - 1 - index;
+        final message = messages[reversedIndex];
+        final isMe = message.senderId == _uid;
+
+        Widget? dateDivider;
+        if (reversedIndex == 0 || !_isSameDay(messages[reversedIndex - 1].createdAt, message.createdAt)) {
+          dateDivider = _buildDateDivider(message.createdAt);
+        }
+
+        return Column(
+          children: [
+            if (dateDivider != null) dateDivider,
+            MessageBubble(message: message, isMe: isMe),
+          ],
         );
       },
     );

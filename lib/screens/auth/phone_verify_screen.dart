@@ -342,34 +342,62 @@ class _PhoneVerifyScreenState extends State<PhoneVerifyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        // 뒤로가기 시 로그아웃 확인
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('로그아웃', style: TextStyle(color: AppColors.textPrimary)),
+            content: const Text('다른 계정으로 로그인하시겠습니까?', style: TextStyle(color: AppColors.textSecondary)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('로그아웃', style: TextStyle(color: AppColors.error)),
+              ),
+            ],
+          ),
+        );
+        if (confirm == true) {
+          await _logout();
+        }
+      },
+      child: Scaffold(
         backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          elevation: 0,
+          leading: IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Icons.arrow_back_ios_rounded, size: 18, color: AppColors.textPrimary),
             ),
-            child: const Icon(Icons.arrow_back_ios_rounded, size: 18, color: AppColors.textPrimary),
-          ),
-          onPressed: _logout,
-        ),
-        actions: [
-          TextButton(
             onPressed: _logout,
-            child: Text(
-              '다른 계정',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
           ),
-        ],
-      ),
-      body: SafeArea(
+          actions: [
+            TextButton(
+              onPressed: _logout,
+              child: Text(
+                '다른 계정',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+        body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -630,6 +658,7 @@ class _PhoneVerifyScreenState extends State<PhoneVerifyScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

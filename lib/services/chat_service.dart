@@ -268,13 +268,73 @@ class ChatService {
 
   // ========== 메시지 ==========
 
-  // 메시지 목록
+  static const int messagesPerPage = 30;
+
+  // 메시지 목록 (전체 - 하위 호환용)
   Stream<List<MessageModel>> getMessages(String chatRoomId) {
     return _firestore
         .collection('chatRooms')
         .doc(chatRoomId)
         .collection('messages')
         .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => MessageModel.fromFirestore(doc))
+          .where((msg) => !msg.isDeleted)
+          .toList();
+    });
+  }
+
+  // 페이지네이션: 초기 메시지 로드 (최신 N개)
+  Future<List<MessageModel>> getInitialMessages(String chatRoomId, {int limit = messagesPerPage}) async {
+    final snapshot = await _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => MessageModel.fromFirestore(doc))
+        .where((msg) => !msg.isDeleted)
+        .toList()
+        .reversed
+        .toList(); // 시간순 정렬
+  }
+
+  // 페이지네이션: 이전 메시지 로드 (커서 기반)
+  Future<List<MessageModel>> getMoreMessages(
+    String chatRoomId, {
+    required DateTime beforeTime,
+    int limit = messagesPerPage,
+  }) async {
+    final snapshot = await _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .where('createdAt', isLessThan: Timestamp.fromDate(beforeTime))
+        .limit(limit)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => MessageModel.fromFirestore(doc))
+        .where((msg) => !msg.isDeleted)
+        .toList()
+        .reversed
+        .toList(); // 시간순 정렬
+  }
+
+  // 새 메시지 실시간 리스닝 (특정 시점 이후)
+  Stream<List<MessageModel>> getNewMessages(String chatRoomId, DateTime afterTime) {
+    return _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .orderBy('createdAt', descending: false)
+        .where('createdAt', isGreaterThan: Timestamp.fromDate(afterTime))
         .snapshots()
         .map((snapshot) {
       return snapshot.docs

@@ -675,7 +675,7 @@ class _StoreScreenState extends State<StoreScreen>
           _buildBenefitItem(Icons.chat_bubble_rounded, '일일 무료 채팅 2회', '매일 무료 채팅 2회 제공'),
           _buildBenefitItem(Icons.videocam_rounded, '채팅 동영상 전송', '일 5회 전송 가능'),
           _buildBenefitItem(Icons.card_giftcard_rounded, '상대방 동영상 권한', '일반 유저에게 권한 3회 부여'),
-          _buildBenefitItem(Icons.phone_rounded, '랜덤 전화 일 3회', '이성 유저와 랜덤 음성 통화'),
+          _buildBenefitItem(Icons.phone_rounded, '랜덤 전화 +2회', '이성 유저와 랜덤 음성 통화'),
           _buildBenefitItem(Icons.people_rounded, '접속 유저 성별 필터', '접속 중인 사람들을 성별로 필터링'),
           _buildBenefitItem(Icons.block_rounded, '광고 제거', '모든 광고 없이 쾌적하게'),
 
@@ -1048,8 +1048,8 @@ class _StoreScreenState extends State<StoreScreen>
           ),
           _buildMaxBenefitItem(
             Icons.phone_rounded,
-            '랜덤 전화 일 10회',
-            '프리미엄 3회 → MAX 10회',
+            '랜덤 전화 +8회',
+            '프리미엄 +2회 → MAX +8회',
           ),
           _buildMaxBenefitItem(
             Icons.bookmark_rounded,

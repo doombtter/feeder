@@ -1,7 +1,7 @@
 name: feeder
 description: "익명 소통 플랫폼"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+5
 
 environment:
   sdk: ^3.5.0
@@ -30,7 +30,7 @@ dependencies:
   url_launcher: ^6.2.1
   video_player: ^2.8.2
   video_compress: ^3.1.2
-  agora_rtc_engine: ^6.2.4
+  agora_rtc_engine: ^6.3.2
   flutter_launcher_icons: ^0.14.4
   cloud_functions: ^6.1.0
   google_sign_in: ^7.2.0

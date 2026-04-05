@@ -258,14 +258,17 @@ class MembershipBenefits {
   }
 
   // 일일 랜덤 전화 횟수
-  static int getDailyRandomCalls(MembershipTier tier) {
+  static int getDailyRandomCalls(MembershipTier tier, {String? gender}) {
+    // 여성 기본 5회
+    final isFemale = gender == 'female';
+    
     switch (tier) {
       case MembershipTier.free:
-        return 1;
+        return isFemale ? 5 : 1;
       case MembershipTier.premium:
-        return 3;
+        return isFemale ? 7 : 3;  // +2
       case MembershipTier.max:
-        return 10;
+        return isFemale ? 13 : 9;  // +8
     }
   }
 }

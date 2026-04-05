@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // 유저 정보 가져오기
   Future<UserModel?> getUser(String uid) async {
@@ -86,19 +88,25 @@ class UserService {
       await docRef.update(updateData);
     } else {
       // 문서 없으면 새로 생성
+      // Firebase Auth에서 이메일, 전화번호 가져오기
+      final currentUser = _auth.currentUser;
+      final email = currentUser?.email ?? '';
+      final phoneNumber = currentUser?.phoneNumber ?? '';
+      
       await docRef.set({
-        'phoneNumber': '',
+        'email': email,
+        'phoneNumber': phoneNumber,
         'nickname': nickname,
         'bio': bio,
         'birthYear': birthYear,
         'gender': gender,
         'region': region,
         'profileImageUrl': profileImageUrl ?? '',
-        'points': 0,
+        'points': 100,  // 초기 포인트 지급
         'receivedRequestCount': 0,
         'isOnline': true,
         'isActive': true,
-        'lastSeenAt': FieldValue.serverTimestamp(),  // 추가!
+        'lastSeenAt': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });

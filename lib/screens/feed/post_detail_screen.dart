@@ -1095,18 +1095,20 @@ class _CommentItemState extends State<_CommentItem> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      GestureDetector(
-                        onTap: widget.onReply,
-                        child: Text(
-                          '답글',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 12,
+                      // 답글에는 답글 버튼 숨김 (1depth만 허용)
+                      if (!isReply)
+                        GestureDetector(
+                          onTap: widget.onReply,
+                          child: Text(
+                            '답글',
+                            style: TextStyle(
+                              color: AppColors.textTertiary,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                      ),
                       if (!isAuthor) ...[
-                        const SizedBox(width: 16),
+                        if (!isReply) const SizedBox(width: 16),
                         GestureDetector(
                           onTap: widget.onChatRequest,
                           child: Text(
@@ -1130,7 +1132,7 @@ class _CommentItemState extends State<_CommentItem> {
                         ),
                       ],
                       if (isAuthor) ...[
-                        const SizedBox(width: 16),
+                        if (!isReply) const SizedBox(width: 16),
                         GestureDetector(
                           onTap: widget.onDelete,
                           child: Text(

@@ -21,12 +21,33 @@ class ShotActionButton extends StatelessWidget {
       onTap: onTap,
       child: Column(
         children: [
-          Icon(icon, color: color, size: 28),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 26,
+              shadows: const [
+                Shadow(color: Colors.black54, blurRadius: 8),
+                Shadow(color: Colors.black38, blurRadius: 16),
+              ],
+            ),
+          ),
           if (label.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(color: color, fontSize: 12),
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                shadows: const [
+                  Shadow(color: Colors.black87, blurRadius: 4),
+                  Shadow(color: Colors.black54, blurRadius: 8),
+                ],
+              ),
             ),
           ],
         ],

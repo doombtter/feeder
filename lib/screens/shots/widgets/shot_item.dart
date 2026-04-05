@@ -187,7 +187,14 @@ class _ShotItemState extends State<ShotItem> {
                   const SizedBox(width: 8),
                   Text(
                     widget.shot.remainingTimeText,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      shadows: [
+                        Shadow(color: Colors.black87, blurRadius: 4),
+                        Shadow(color: Colors.black54, blurRadius: 8),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -196,7 +203,14 @@ class _ShotItemState extends State<ShotItem> {
               if (widget.shot.caption != null && widget.shot.caption!.isNotEmpty)
                 Text(
                   widget.shot.caption!,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    shadows: [
+                      Shadow(color: Colors.black87, blurRadius: 4),
+                      Shadow(color: Colors.black54, blurRadius: 8),
+                    ],
+                  ),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),

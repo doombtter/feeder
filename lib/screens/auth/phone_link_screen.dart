@@ -389,29 +389,56 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: const Icon(Icons.arrow_back_ios_rounded, size: 18, color: AppColors.textPrimary),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        // 뒤로가기 시 로그아웃 확인
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('로그아웃', style: TextStyle(color: AppColors.textPrimary)),
+            content: const Text('로그인을 취소하시겠습니까?', style: TextStyle(color: AppColors.textSecondary)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('로그아웃', style: TextStyle(color: AppColors.error)),
+              ),
+            ],
           ),
-          onPressed: () async {
-            // 소셜 로그인 해제하고 돌아가기
-            await FirebaseAuth.instance.signOut();
-            if (mounted) Navigator.pop(context);
-          },
+        );
+        if (confirm == true) {
+          await FirebaseAuth.instance.signOut();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          elevation: 0,
+          leading: IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Icons.arrow_back_ios_rounded, size: 18, color: AppColors.textPrimary),
+            ),
+            onPressed: () async {
+              // 소셜 로그인 해제 (StreamBuilder가 감지하여 로그인 화면으로)
+              await FirebaseAuth.instance.signOut();
+            },
+          ),
         ),
-      ),
-      body: SafeArea(
+        body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -719,7 +746,8 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

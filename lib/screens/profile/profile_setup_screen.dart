@@ -157,17 +157,45 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('프로필 설정'),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        // 뒤로가기 시 로그아웃 확인
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppColors.card,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('로그아웃', style: TextStyle(color: AppColors.textPrimary)),
+            content: const Text('프로필 설정을 취소하고 로그아웃하시겠습니까?', style: TextStyle(color: AppColors.textSecondary)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('로그아웃', style: TextStyle(color: AppColors.error)),
+              ),
+            ],
+          ),
+        );
+        if (confirm == true) {
+          await _authService.signOut();
+        }
+      },
+      child: Scaffold(
         backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        automaticallyImplyLeading: false,
-      ),
-      body: SingleChildScrollView(
+        appBar: AppBar(
+          title: const Text('프로필 설정'),
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          automaticallyImplyLeading: false,
+        ),
+        body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -358,7 +386,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildSectionTitle(String title, {bool required = false}) {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import '../core/constants/app_constants.dart';
 import '../core/widgets/membership_widgets.dart';
 import '../models/user_model.dart';
 
@@ -34,19 +35,20 @@ class RandomCallService {
   // 쿼터 관리
   // ══════════════════════════════════════════════════════════════
 
-  /// 랜덤 전화 가능 여부 확인
-  Future<({bool canCall, int remaining, int used})> checkCallQuota() async {
-    if (_uid == null) return (canCall: false, remaining: 0, used: 0);
+  /// 랜덤 전화 가능 여부 확인 (포인트 잔액 포함)
+  Future<({bool canCall, int remaining, int used, int points, bool needsPayment})> checkCallQuota() async {
+    if (_uid == null) return (canCall: false, remaining: 0, used: 0, points: 0, needsPayment: false);
 
     final userDoc = await _firestore.collection('users').doc(_uid).get();
-    if (!userDoc.exists) return (canCall: false, remaining: 0, used: 0);
+    if (!userDoc.exists) return (canCall: false, remaining: 0, used: 0, points: 0, needsPayment: false);
 
     final user = UserModel.fromFirestore(userDoc);
     final tier = user.isMax 
         ? MembershipTier.max 
         : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
 
-    final dailyLimit = MembershipBenefits.getDailyRandomCalls(tier);
+    // 성별에 따른 일일 횟수
+    final dailyLimit = MembershipBenefits.getDailyRandomCalls(tier, gender: user.gender);
 
     // 일일 리셋 체크
     final now = DateTime.now();
@@ -71,7 +73,32 @@ class RandomCallService {
     }
 
     final remaining = dailyLimit - usedToday;
-    return (canCall: remaining > 0, remaining: remaining, used: usedToday);
+    final points = user.points;
+    final needsPayment = remaining <= 0;
+    final canCall = remaining > 0 || points >= AppConstants.randomCallCost;
+    
+    return (canCall: canCall, remaining: remaining, used: usedToday, points: points, needsPayment: needsPayment);
+  }
+
+  /// 포인트로 추가 통화 결제
+  Future<bool> payForCall() async {
+    if (_uid == null) return false;
+
+    try {
+      final userDoc = await _firestore.collection('users').doc(_uid).get();
+      if (!userDoc.exists) return false;
+
+      final currentPoints = userDoc.data()?['points'] ?? 0;
+      if (currentPoints < AppConstants.randomCallCost) return false;
+
+      await _firestore.collection('users').doc(_uid).update({
+        'points': FieldValue.increment(-AppConstants.randomCallCost),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('포인트 결제 실패: $e');
+      return false;
+    }
   }
 
   /// 쿼터 차감

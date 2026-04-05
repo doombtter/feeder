@@ -28,6 +28,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
   bool _isMatching = false;
   int _remainingCalls = 0;
   int _dailyLimit = 1;
+  int _currentPoints = 0;
   String _myGender = 'male';
   String _myNickname = '익명';
   MembershipTier _tier = MembershipTier.free;
@@ -108,9 +109,10 @@ class _RandomCallScreenState extends State<RandomCallScreen>
       _tier = user.isMax 
           ? MembershipTier.max 
           : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
-      _dailyLimit = MembershipBenefits.getDailyRandomCalls(_tier);
       _myGender = user.gender;
       _myNickname = user.nickname;
+      // 성별 기반 일일 횟수
+      _dailyLimit = MembershipBenefits.getDailyRandomCalls(_tier, gender: _myGender);
     }
 
     final quota = await _callService.checkCallQuota();
@@ -121,6 +123,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
     if (mounted) {
       setState(() {
         _remainingCalls = quota.remaining;
+        _currentPoints = quota.points;
         _isLoading = false;
       });
     }
@@ -164,11 +167,20 @@ class _RandomCallScreenState extends State<RandomCallScreen>
       return;
     }
 
+    // 무료 횟수 소진 시 포인트 결제 다이얼로그
     if (_remainingCalls <= 0) {
-      _showUpgradeDialog();
+      if (_currentPoints >= AppConstants.randomCallCost) {
+        _showPaymentDialog();
+      } else {
+        _showUpgradeDialog();
+      }
       return;
     }
 
+    _proceedMatching();
+  }
+
+  void _proceedMatching() {
     setState(() {
       _isMatching = true;
       _matchingSeconds = 0;
@@ -181,9 +193,87 @@ class _RandomCallScreenState extends State<RandomCallScreen>
       }
     });
 
-    await _callService.joinQueue(
+    _callService.joinQueue(
       gender: _myGender,
       nickname: _myNickname,
+    );
+  }
+
+  void _showPaymentDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          '추가 통화',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.phone_rounded, color: AppColors.primary, size: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${AppConstants.randomCallCost}P',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '포인트를 사용하여\n추가 통화를 시작할까요?',
+              style: TextStyle(color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '보유: ${_currentPoints}P',
+              style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              
+              final success = await _callService.payForCall();
+              if (success) {
+                setState(() {
+                  _currentPoints -= AppConstants.randomCallCost;
+                });
+                _proceedMatching();
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('포인트가 부족합니다')),
+                  );
+                }
+              }
+            },
+            child: const Text('사용하기', style: TextStyle(color: AppColors.primary)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -207,7 +297,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '멤버십을 업그레이드하면\n더 많이 이용할 수 있어요!',
+              '포인트가 부족해요.\n멤버십을 업그레이드하면 더 많이 이용할 수 있어요!',
               style: TextStyle(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
@@ -220,11 +310,15 @@ class _RandomCallScreenState extends State<RandomCallScreen>
               ),
               child: Column(
                 children: [
-                  _buildTierRow('Free', '1회', _tier == MembershipTier.free),
-                  _buildTierRow('Premium', '3회', _tier == MembershipTier.premium),
-                  _buildTierRow('MAX', '10회', _tier == MembershipTier.max),
+                  _buildTierRow('Premium', '+2회', _tier == MembershipTier.premium),
+                  _buildTierRow('MAX', '+8회', _tier == MembershipTier.max),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '또는 ${AppConstants.randomCallCost}P로 추가 통화 가능',
+              style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
             ),
           ],
         ),
@@ -241,7 +335,7 @@ class _RandomCallScreenState extends State<RandomCallScreen>
                 MaterialPageRoute(builder: (context) => const StoreScreen()),
               );
             },
-            child: const Text('업그레이드', style: TextStyle(color: AppColors.primary)),
+            child: const Text('상점 가기', style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
@@ -527,6 +621,8 @@ class _RandomCallScreenState extends State<RandomCallScreen>
   }
 
   Widget _buildBottomInfo() {
+    final canPayWithPoints = _remainingCalls <= 0 && _currentPoints >= AppConstants.randomCallCost;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -568,15 +664,39 @@ class _RandomCallScreenState extends State<RandomCallScreen>
             ],
           ),
           const SizedBox(height: 12),
+          // 포인트 잔액 표시
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '보유 포인트',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+              Text(
+                '${_currentPoints}P',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Icon(Icons.info_outline_rounded, size: 16, color: AppColors.textTertiary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '매칭 성공 시 횟수가 차감됩니다',
+                  canPayWithPoints 
+                      ? '${AppConstants.randomCallCost}P로 추가 통화 가능'
+                      : '매칭 성공 시 횟수가 차감됩니다',
                   style: TextStyle(
-                    color: AppColors.textTertiary,
+                    color: canPayWithPoints ? AppColors.primary : AppColors.textTertiary,
                     fontSize: 12,
                   ),
                 ),

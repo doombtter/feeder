@@ -78,6 +78,10 @@ class ShotsScreenState extends State<ShotsScreen>
           _shots = shots;
           _isLoading = false;
         });
+        // 첫 번째 Shot 조회 기록
+        if (shots.isNotEmpty && !_isReplayMode) {
+          _shotService.markAsViewed(shots.first.id, _uid);
+        }
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserModel {
   final String uid;
+  final String email;
   final String phoneNumber;
   final String nickname;
   final String bio;
@@ -38,6 +39,7 @@ class UserModel {
 
   UserModel({
     required this.uid,
+    this.email = '',
     required this.phoneNumber,
     this.nickname = '',
     this.bio = '',
@@ -124,6 +126,7 @@ class UserModel {
 
     return UserModel(
       uid: doc.id,
+      email: data['email'] ?? '',
       phoneNumber: data['phoneNumber'] ?? '',
       nickname: data['nickname'] ?? '',
       bio: data['bio'] ?? '',
@@ -158,6 +161,7 @@ class UserModel {
 
   Map<String, dynamic> toFirestore() {
     return {
+      'email': email,
       'phoneNumber': phoneNumber,
       'nickname': nickname,
       'bio': bio,
