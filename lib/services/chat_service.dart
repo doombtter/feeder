@@ -7,6 +7,11 @@ import '../core/widgets/membership_widgets.dart';
 import 'notification_service.dart';
 
 class ChatService {
+  // 싱글톤 패턴
+  static final ChatService _instance = ChatService._internal();
+  factory ChatService() => _instance;
+  ChatService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
 
@@ -123,11 +128,8 @@ class ChatService {
       'expiresAt': Timestamp.fromDate(now.add(const Duration(days: 7))),
     });
 
-    // 상대방 receivedRequestCount 증가
-    final toUserRef = _firestore.collection('users').doc(toUserId);
-    batch.update(toUserRef, {
-      'receivedRequestCount': FieldValue.increment(1),
-    });
+    // 참고: receivedRequestCount는 chatRequests 쿼리로 실시간 계산
+    // 상대방 문서 업데이트 제거 (권한 문제 해결)
 
     await batch.commit();
 
@@ -473,26 +475,21 @@ class ChatService {
         .map((snapshot) => snapshot.docs.length);
   }
 
-  // 전체 읽지 않은 메시지 수 (모든 채팅방)
+  // 전체 읽지 않은 메시지 수 (모든 채팅방) - 최적화: 단일 쿼리
   Stream<int> getTotalUnreadCount(String myUserId) {
     return _firestore
         .collection('chatRooms')
         .where('participants', arrayContains: myUserId)
         .where('isActive', isEqualTo: true)
         .snapshots()
-        .asyncMap((roomSnapshot) async {
+        .map((roomSnapshot) {
       int totalUnread = 0;
       
       for (final room in roomSnapshot.docs) {
-        final unreadSnapshot = await _firestore
-            .collection('chatRooms')
-            .doc(room.id)
-            .collection('messages')
-            .where('isRead', isEqualTo: false)
-            .where('senderId', isNotEqualTo: myUserId)
-            .get();
-        
-        totalUnread += unreadSnapshot.docs.length;
+        final data = room.data();
+        final unreadCounts = data['unreadCounts'] as Map<String, dynamic>? ?? {};
+        final myUnread = (unreadCounts[myUserId] ?? 0) as int;
+        totalUnread += myUnread;
       }
       
       return totalUnread;

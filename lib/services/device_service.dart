@@ -35,6 +35,11 @@ class DeviceInfo {
 
 /// 기기 정보 및 접속 로그 관리 서비스
 class DeviceService {
+  // 싱글톤 패턴
+  static final DeviceService _instance = DeviceService._internal();
+  factory DeviceService() => _instance;
+  DeviceService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final DeviceInfoPlugin _deviceInfoPlugin = DeviceInfoPlugin();
   
@@ -78,34 +83,45 @@ class DeviceService {
     return _cachedDeviceInfo!;
   }
 
-  /// IP 주소 가져오기 (외부 API 사용)
+  /// IP 주소 가져오기 (외부 API 사용) - 타임아웃 2초
   Future<String?> getIpAddress() async {
     if (_cachedIpAddress != null) return _cachedIpAddress;
 
     try {
       final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 5);
+      client.connectionTimeout = const Duration(seconds: 2); // 5초 → 2초
       
-      final request = await client.getUrl(Uri.parse('https://api.ipify.org'));
-      final response = await request.close();
+      final request = await client.getUrl(Uri.parse('https://api.ipify.org'))
+          .timeout(const Duration(seconds: 2));
+      final response = await request.close()
+          .timeout(const Duration(seconds: 2));
       
       if (response.statusCode == 200) {
-        final ip = await response.transform(const SystemEncoding().decoder).join();
+        final ip = await response.transform(const SystemEncoding().decoder).join()
+            .timeout(const Duration(seconds: 1));
         _cachedIpAddress = ip.trim();
         return _cachedIpAddress;
       }
     } catch (e) {
-      debugPrint('IP 주소 가져오기 실패: $e');
+      debugPrint('IP 주소 가져오기 실패 (무시됨): $e');
     }
     return null;
   }
 
-  /// 로그인 시 접속 정보 저장
+  /// 로그인 시 접속 정보 저장 (최적화: IP 실패해도 계속 진행)
   Future<void> recordLogin(String uid) async {
     try {
-      final deviceInfo = await getDeviceInfo();
-      final ipAddress = await getIpAddress();
-      final now = DateTime.now();
+      // 기기 정보와 IP를 병렬로 가져오기
+      final results = await Future.wait([
+        getDeviceInfo(),
+        getIpAddress().timeout(
+          const Duration(seconds: 2), 
+          onTimeout: () => null,
+        ),
+      ]);
+      
+      final deviceInfo = results[0] as DeviceInfo;
+      final ipAddress = results[1] as String?;
 
       // users 문서에 현재 기기 정보 업데이트
       await _firestore.collection('users').doc(uid).set({
@@ -115,19 +131,34 @@ class DeviceService {
         'appVersion': deviceInfo.appVersion,
       }, SetOptions(merge: true));
 
-      // 로그인 기록 추가 (최근 20개만 유지)
-      final loginHistoryRef = _firestore
+      // 로그인 기록 추가 (히스토리 정리는 별도로)
+      _firestore
           .collection('users')
           .doc(uid)
-          .collection('loginHistory');
-
-      await loginHistoryRef.add({
+          .collection('loginHistory')
+          .add({
         'device': deviceInfo.toMap(),
         'ipAddress': ipAddress,
         'loginAt': FieldValue.serverTimestamp(),
       });
 
-      // 오래된 기록 삭제 (20개 초과 시)
+      // 히스토리 정리는 백그라운드에서 (await 안 함)
+      _cleanupLoginHistory(uid);
+
+      debugPrint('📱 로그인 기록 저장 완료: ${deviceInfo.model}');
+    } catch (e) {
+      debugPrint('로그인 기록 저장 실패: $e');
+    }
+  }
+
+  /// 오래된 로그인 기록 정리 (백그라운드)
+  Future<void> _cleanupLoginHistory(String uid) async {
+    try {
+      final loginHistoryRef = _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('loginHistory');
+
       final oldRecords = await loginHistoryRef
           .orderBy('loginAt', descending: true)
           .limit(100)
@@ -140,10 +171,8 @@ class DeviceService {
         }
         await batch.commit();
       }
-
-      debugPrint('📱 로그인 기록 저장 완료: ${deviceInfo.model}, IP: $ipAddress');
     } catch (e) {
-      debugPrint('로그인 기록 저장 실패: $e');
+      debugPrint('로그인 히스토리 정리 실패: $e');
     }
   }
 

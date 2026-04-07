@@ -2,6 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/suspension_model.dart';
 
 class SuspensionService {
+  // 싱글톤 패턴
+  static final SuspensionService _instance = SuspensionService._internal();
+  factory SuspensionService() => _instance;
+  SuspensionService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // ══════════════════════════════════════════════════════════════

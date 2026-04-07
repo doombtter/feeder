@@ -4,6 +4,11 @@ import '../models/comment_model.dart';
 import 'notification_service.dart';
 
 class PostService {
+  // 싱글톤 패턴
+  static final PostService _instance = PostService._internal();
+  factory PostService() => _instance;
+  PostService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
 

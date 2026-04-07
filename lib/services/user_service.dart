@@ -4,6 +4,11 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 
 class UserService {
+  // 싱글톤 패턴
+  static final UserService _instance = UserService._internal();
+  factory UserService() => _instance;
+  UserService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 

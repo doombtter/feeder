@@ -2,6 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/shot_model.dart';
 
 class ShotService {
+  // 싱글톤 패턴
+  static final ShotService _instance = ShotService._internal();
+  factory ShotService() => _instance;
+  ShotService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 활성 Shots 목록 (24시간 이내, 만료되지 않은 것, 조회한 것 제외)

@@ -3,6 +3,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/notification_model.dart';
 
 class NotificationService {
+  // 싱글톤 패턴
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
@@ -259,6 +264,12 @@ class NotificationService {
       'senderGender': senderGender,
       'createdAt': FieldValue.serverTimestamp(),
       'isRead': false,
+      // FCM 푸시용 data (Cloud Functions에서 사용)
+      'fcmData': {
+        'type': type.name,
+        'targetId': targetId ?? '',
+        'senderId': senderId ?? '',
+      },
     });
 
     // FCM 푸시 알림은 Cloud Functions에서 처리

@@ -2,6 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/report_model.dart';
 
 class ReportService {
+  // 싱글톤 패턴
+  static final ReportService _instance = ReportService._internal();
+  factory ReportService() => _instance;
+  ReportService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 신고하기
