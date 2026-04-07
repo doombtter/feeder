@@ -273,7 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               _buildNavItem(
                 icon: Icons.logout_rounded,
-                title: '로그아웃',
+                title: '로그아웃(production 삭제)',
                 onTap: () => _showLogoutDialog(context),
               ),
               _buildDivider(),
@@ -629,7 +629,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final user = FirebaseAuth.instance.currentUser!;
+      final uid = user.uid;
 
       final userDoc = await _firestore.collection('users').doc(uid).get();
       final phoneNumber = userDoc.data()?['phoneNumber'] ?? '';
@@ -643,11 +644,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       await _firestore.collection('users').doc(uid).update({
         'isDeleted': true,
+        'isActive': false,
         'deletedAt': FieldValue.serverTimestamp(),
         'nickname': '탈퇴한 사용자',
         'bio': '',
         'profileImageUrls': [],
         'phoneNumber': '',
+        'email': '',
       });
 
       final posts = await _firestore
@@ -678,7 +681,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
 
-      await FirebaseAuth.instance.signOut();
+      // Firebase Auth 계정 삭제 (이 작업은 마지막에!)
+      try {
+        await user.delete();
+      } catch (e) {
+        // 재인증이 필요한 경우 (최근 로그인이 아닌 경우)
+        // 일단 로그아웃만 진행하고, 계정은 isDeleted로 비활성화됨
+        debugPrint('Firebase Auth 계정 삭제 실패 (재인증 필요): $e');
+        await FirebaseAuth.instance.signOut();
+      }
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);

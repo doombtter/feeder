@@ -6,23 +6,31 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'services/admob_service.dart';
+import 'services/device_service.dart';
+import 'services/post_service.dart';
 
 // Core
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
-import 'core/widgets/splash_screen.dart';
+import 'core/widgets/update_screen.dart';
 
 // Screens - 새로운 인증 플로우
 import 'screens/auth/social_login_screen.dart';
 import 'screens/auth/phone_link_screen.dart';
 import 'screens/auth/phone_verify_screen.dart';
 import 'screens/feed/home_screen.dart';
+import 'screens/feed/post_detail_screen.dart';
 import 'screens/profile/profile_setup_screen.dart';
+import 'screens/chat/chat_room_screen.dart';
+import 'screens/chat/received_requests_screen.dart';
 
 // Services & Models
 import 'services/user_service.dart';
 import 'services/notification_service.dart';
 import 'models/user_model.dart';
+
+/// 글로벌 네비게이터 키 (알림 클릭 시 화면 이동용)
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // 백그라운드 메시지 핸들러 (최상위 함수)
 @pragma('vm:entry-point')
@@ -36,9 +44,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // .env 로드
-  await dotenv.load(fileName: '.env');
-
   // 상태바 스타일 설정 (다크 테마용 - 흰색 아이콘)
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -48,20 +53,14 @@ void main() async {
     ),
   );
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // 병렬 초기화 (Firebase는 필수라 먼저)
+  await Future.wait([
+    dotenv.load(fileName: '.env'),
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
+  ]);
 
-  try {
-    // plugin attach 테스트
-    final user = FirebaseAuth.instance.currentUser;
-    debugPrint("🔥 Plugin attach test, currentUser: ${user?.uid}");
-  } catch (e) {
-    debugPrint("❌ Plugin attach FAILED: $e");
-  }
-  
-  // AdMob 초기화
-  await AdMobService.initialize();
+  // AdMob은 백그라운드에서 (화면 차단 안 함)
+  AdMobService.initialize();
 
   // FCM 백그라운드 핸들러 등록
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
@@ -78,18 +77,106 @@ class FeederApp extends StatefulWidget {
 
 class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
   final _userService = UserService();
-  bool _showSplash = true;
+  final _deviceService = DeviceService();
+  
+  AppVersionStatus? _versionStatus;
+  bool _versionChecked = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _checkAppVersion();
+    _setupFCMHandlers();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// FCM 알림 클릭 핸들러 설정
+  void _setupFCMHandlers() {
+    // 앱이 종료된 상태에서 알림 클릭으로 실행된 경우
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      if (message != null) {
+        _handleNotificationClick(message);
+      }
+    });
+
+    // 앱이 백그라운드에서 알림 클릭으로 포그라운드로 온 경우
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationClick);
+  }
+
+  /// 알림 클릭 시 해당 화면으로 이동
+  Future<void> _handleNotificationClick(RemoteMessage message) async {
+    debugPrint('🔔 알림 클릭: ${message.data}');
+    
+    // 로그인 상태 확인
+    if (FirebaseAuth.instance.currentUser == null) return;
+
+    // 약간의 딜레이 (화면이 준비될 때까지)
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final data = message.data;
+    final type = data['type'];
+    final targetId = data['targetId'];
+
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+
+    switch (type) {
+      case 'chatRequest':
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const ReceivedRequestsScreen()),
+        );
+        break;
+
+      case 'chatAccepted':
+      case 'newMessage':
+        if (targetId != null) {
+          navigator.push(
+            MaterialPageRoute(
+              builder: (_) => ChatRoomScreen(chatRoomId: targetId),
+            ),
+          );
+        }
+        break;
+
+      case 'newComment':
+      case 'newReply':
+        if (targetId != null) {
+          final post = await PostService().getPost(targetId);
+          if (post != null) {
+            navigator.push(
+              MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+            );
+          }
+        }
+        break;
+    }
+  }
+
+  Future<void> _checkAppVersion() async {
+    try {
+      final status = await _deviceService.checkAppVersion()
+          .timeout(const Duration(seconds: 3), onTimeout: () => AppVersionStatus.ok());
+      if (mounted) {
+        setState(() {
+          _versionStatus = status;
+          _versionChecked = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('버전 체크 실패: $e');
+      if (mounted) {
+        setState(() {
+          _versionStatus = AppVersionStatus.ok();
+          _versionChecked = true;
+        });
+      }
+    }
   }
 
   @override
@@ -113,18 +200,40 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: '피더',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
-      home: _showSplash
-          ? SplashScreen(
-              onComplete: () {
-                setState(() => _showSplash = false);
-              },
-            )
-          : const AuthWrapper(),
+      home: _buildHome(),
+    );
+  }
+
+  Widget _buildHome() {
+    // 버전 체크 중 (최대 3초)
+    if (!_versionChecked) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+
+    // 강제 업데이트 필요
+    if (_versionStatus?.needsForceUpdate == true) {
+      return ForceUpdateScreen(
+        latestVersion: _versionStatus!.latestVersion!,
+        message: _versionStatus!.message ?? '새로운 버전이 출시되었습니다.',
+        storeUrl: _versionStatus!.storeUrl,
+      );
+    }
+
+    // 바로 AuthWrapper로
+    return AuthWrapper(
+      showUpdateDialog: _versionStatus?.hasOptionalUpdate == true,
+      versionStatus: _versionStatus,
     );
   }
 }
@@ -138,7 +247,14 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
 /// 
 /// 기존 계정이어도 매번 전화번호 인증을 거칩니다.
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
+  final bool showUpdateDialog;
+  final AppVersionStatus? versionStatus;
+
+  const AuthWrapper({
+    super.key,
+    this.showUpdateDialog = false,
+    this.versionStatus,
+  });
   
   /// 새 로그인 시작 표시 (SocialLoginScreen에서 호출)
   static void markNewLogin() {
@@ -163,6 +279,7 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   late final Stream<User?> _authStream;
+  final _deviceService = DeviceService();
   
   // 새 로그인(소셜 로그인 직접 수행)인지 여부
   static bool _isNewLogin = false;
@@ -172,6 +289,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
   
   // 앱 시작 시 이미 로그인되어 있었는지
   bool _wasLoggedInOnStart = false;
+  
+  // 선택적 업데이트 다이얼로그 표시 여부
+  bool _updateDialogShown = false;
 
   @override
   void initState() {
@@ -180,16 +300,39 @@ class _AuthWrapperState extends State<AuthWrapper> {
     // 앱 시작 시 이미 로그인되어 있으면 자동 로그인
     _wasLoggedInOnStart = FirebaseAuth.instance.currentUser != null;
 
-    // Android native가 세션 복구할 시간을 잠깐 준 후 authStateChanges attach
-    _authStream = Stream<User?>.fromFuture(
-      Future.delayed(const Duration(milliseconds: 500), () {
-        return FirebaseAuth.instance.currentUser;
-      }),
-    ).asyncExpand((_) => FirebaseAuth.instance.authStateChanges());
+    // 딜레이 없이 바로 authStateChanges 연결
+    _authStream = FirebaseAuth.instance.authStateChanges();
+  }
+
+  void _showOptionalUpdateDialog(BuildContext context) {
+    if (_updateDialogShown || widget.versionStatus == null) return;
+    _updateDialogShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        builder: (ctx) => OptionalUpdateDialog(
+          latestVersion: widget.versionStatus!.latestVersion!,
+          message: widget.versionStatus!.message ?? '새로운 버전이 있습니다.',
+          storeUrl: widget.versionStatus!.storeUrl,
+        ),
+      );
+    });
+  }
+
+  Future<void> _recordLoginIfNeeded(String uid) async {
+    // 로그인 기록은 한 번만
+    if (!_isNewLogin && !_wasLoggedInOnStart) return;
+    await _deviceService.recordLogin(uid);
   }
 
   @override
   Widget build(BuildContext context) {
+    // 선택적 업데이트 다이얼로그 표시
+    if (widget.showUpdateDialog && !_updateDialogShown) {
+      _showOptionalUpdateDialog(context);
+    }
+
     return StreamBuilder<User?>(
       stream: _authStream,
       builder: (context, snapshot) {
@@ -254,25 +397,33 @@ class ProfileCheckWrapper extends StatefulWidget {
 
 class _ProfileCheckWrapperState extends State<ProfileCheckWrapper> {
   final _notificationService = NotificationService();
+  final _deviceService = DeviceService();
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusManager.instance.primaryFocus?.unfocus();
-      _initFCM();
+      _initializeInBackground();
     });
   }
 
-  Future<void> _initFCM() async {
+  /// FCM, 로그인 기록을 백그라운드에서 처리 (화면 전환 차단 안 함)
+  void _initializeInBackground() {
+    if (_initialized) return;
+    _initialized = true;
+    
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      await _notificationService.initialize(uid);
+    if (uid == null) return;
 
-      FirebaseMessaging.onMessage.listen((message) {
-        debugPrint('포그라운드 메시지: ${message.notification?.title}');
-      });
-    }
+    // 병렬로 실행 (await 안 함 - 화면 차단 방지)
+    _notificationService.initialize(uid);
+    _deviceService.recordLogin(uid);
+
+    FirebaseMessaging.onMessage.listen((message) {
+      debugPrint('포그라운드 메시지: ${message.notification?.title}');
+    });
   }
 
   @override
@@ -303,6 +454,20 @@ class _ProfileCheckWrapperState extends State<ProfileCheckWrapper> {
         }
 
         final user = snapshot.data;
+
+        // 탈퇴한 사용자 체크
+        if (user != null && user.isDeleted) {
+          // 탈퇴한 계정으로 로그인 시도 → 강제 로그아웃
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await FirebaseAuth.instance.signOut();
+          });
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          );
+        }
 
         if (user == null || !user.isProfileComplete) {
           return const ProfileSetupScreen();

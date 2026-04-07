@@ -153,30 +153,60 @@ class ShotsScreenState extends State<ShotsScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: TabBar(
-                    controller: _tabController,
-                    indicatorColor: Colors.white,
-                    indicatorWeight: 2,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.white54,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    tabs: const [
-                      Tab(text: 'Shots'),
-                      Tab(text: '내 Shot'),
-                    ],
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      tabBarTheme: TabBarThemeData(
+                        labelStyle: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              blurRadius: 8,
+                            ),
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                        unselectedLabelStyle: TextStyle(
+                          fontWeight: FontWeight.normal,
+                          fontSize: 15,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              blurRadius: 8,
+                            ),
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorColor: Colors.white,
+                      indicatorWeight: 2,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white54,
+                      tabs: const [
+                        Tab(text: 'Shots'),
+                        Tab(text: '내 Shot'),
+                      ],
+                    ),
                   ),
                 ),
                 if (_tabController.index == 0) ...[
-                  IconButton(
-                    icon: Icon(
-                      _isReplayMode ? Icons.fiber_new : Icons.replay,
-                      color: Colors.white,
-                    ),
+                  _buildShadowedIconButton(
+                    icon: _isReplayMode ? Icons.fiber_new : Icons.replay,
                     onPressed: _toggleReplayMode,
                   ),
                 ],
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+                _buildShadowedIconButton(
+                  icon: Icons.add_circle_outline,
                   onPressed: _createShot,
                 ),
               ],
@@ -192,6 +222,29 @@ class ShotsScreenState extends State<ShotsScreen>
           _buildMyShotsTab(),
         ],
       ),
+    );
+  }
+
+  Widget _buildShadowedIconButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      icon: Icon(
+        icon,
+        color: Colors.white,
+        shadows: [
+          Shadow(
+            color: Colors.black.withValues(alpha: 0.8),
+            blurRadius: 8,
+          ),
+          Shadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 16,
+          ),
+        ],
+      ),
+      onPressed: onPressed,
     );
   }
 

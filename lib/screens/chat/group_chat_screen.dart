@@ -238,14 +238,36 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 return ListView.builder(
                   controller: _scrollController,
                   reverse: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index].data() as Map<String, dynamic>;
                     final isMe = message['senderId'] == _uid;
                     final isAdmin = message['senderId'] == 'admin';
+                    final senderId = message['senderId'];
+                    
+                    // 연속 메시지 체크 (reverse라 index+1이 이전 메시지)
+                    final prevMessage = index < messages.length - 1 
+                        ? messages[index + 1].data() as Map<String, dynamic>
+                        : null;
+                    final nextMessage = index > 0 
+                        ? messages[index - 1].data() as Map<String, dynamic>
+                        : null;
+                    
+                    final isFirstInGroup = prevMessage == null || 
+                        prevMessage['senderId'] != senderId ||
+                        _isTimeDifferent(message['createdAt'], prevMessage['createdAt']);
+                    final isLastInGroup = nextMessage == null || 
+                        nextMessage['senderId'] != senderId ||
+                        _isTimeDifferent(nextMessage['createdAt'], message['createdAt']);
 
-                    return _buildMessageBubble(message, isMe, isAdmin);
+                    return _buildMessageBubble(
+                      message, 
+                      isMe, 
+                      isAdmin,
+                      isFirstInGroup: isFirstInGroup,
+                      isLastInGroup: isLastInGroup,
+                    );
                   },
                 );
               },
@@ -259,7 +281,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> message, bool isMe, bool isAdmin) {
+  Widget _buildMessageBubble(
+    Map<String, dynamic> message, 
+    bool isMe, 
+    bool isAdmin, {
+    bool isFirstInGroup = true,
+    bool isLastInGroup = true,
+  }) {
     final nickname = message['senderNickname'] ?? '익명';
     final gender = message['senderGender'] ?? 'male';
     final content = message['content'] ?? '';
@@ -269,26 +297,26 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     if (isAdmin) {
       // 운영자 메시지 (시스템 알림 스타일)
       return Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: AppColors.primary.withValues(alpha:0.1),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppColors.primary.withValues(alpha:0.3)),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
                 color: AppColors.primary,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
               ),
               child: const Text(
                 '운영자',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -299,7 +327,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 content,
                 style: TextStyle(
                   color: AppColors.textPrimary,
-                  fontSize: 14,
+                  fontSize: 13,
                 ),
               ),
             ),
@@ -308,16 +336,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       );
     }
 
+    // 연속 메시지일 때 더 작은 마진
+    final topPadding = isFirstInGroup ? 6.0 : 1.5;
+    
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.only(top: topPadding),
       child: Row(
         mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // 프로필 이미지 (다른 사람 메시지만)
+          // 프로필 이미지 (첫 메시지만, 다른 사람만)
           if (!isMe) ...[
-            _buildAvatar(profileUrl, gender),
-            const SizedBox(width: 8),
+            if (isFirstInGroup)
+              _buildAvatar(profileUrl, gender)
+            else
+              const SizedBox(width: 36), // 아바타 자리 유지
+            const SizedBox(width: 6),
           ],
           
           // 메시지 내용
@@ -325,32 +359,32 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             child: Column(
               crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                // 닉네임 (다른 사람 메시지만)
-                if (!isMe)
+                // 닉네임 (첫 메시지만, 다른 사람만)
+                if (!isMe && isFirstInGroup)
                   Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                    padding: const EdgeInsets.only(left: 2, bottom: 2),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           nickname,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: AppColors.textSecondary,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 3),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
                           decoration: BoxDecoration(
                             color: gender == 'male' ? AppColors.maleBg : AppColors.femaleBg,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                           ),
                           child: Text(
                             gender == 'male' ? '남' : '여',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 9,
                               color: gender == 'male' ? AppColors.male : AppColors.female,
                               fontWeight: FontWeight.w600,
                             ),
@@ -360,47 +394,66 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     ),
                   ),
                 
-                // 버블
-                Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.65,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isMe ? AppColors.primary : AppColors.card,
-                    borderRadius: BorderRadius.circular(18).copyWith(
-                      bottomRight: isMe ? const Radius.circular(4) : null,
-                      bottomLeft: !isMe ? const Radius.circular(4) : null,
-                    ),
-                    border: isMe ? null : Border.all(color: AppColors.border.withValues(alpha:0.5)),
-                  ),
-                  child: Text(
-                    content,
-                    style: TextStyle(
-                      color: isMe ? Colors.white : AppColors.textPrimary,
-                      fontSize: 15,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-                
-                // 시간
-                if (createdAt != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
-                    child: Text(
-                      _formatTime(createdAt),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textTertiary,
+                // 버블 + 시간을 Row로 배치
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (isMe && isLastInGroup && createdAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4, bottom: 2),
+                        child: Text(
+                          _formatTime(createdAt),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                    Flexible(
+                      child: Container(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.65,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: isMe ? AppColors.primary : AppColors.card,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: Radius.circular(isMe ? 16 : (isLastInGroup ? 4 : 16)),
+                            bottomRight: Radius.circular(isMe ? (isLastInGroup ? 4 : 16) : 16),
+                          ),
+                          border: isMe ? null : Border.all(color: AppColors.border.withValues(alpha:0.4)),
+                        ),
+                        child: Text(
+                          content,
+                          style: TextStyle(
+                            color: isMe ? Colors.white : AppColors.textPrimary,
+                            fontSize: 14,
+                            height: 1.3,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    if (!isMe && isLastInGroup && createdAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 2),
+                        child: Text(
+                          _formatTime(createdAt),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
           
-          if (isMe) const SizedBox(width: 8),
+          if (isMe) const SizedBox(width: 6),
         ],
       ),
     );
@@ -615,5 +668,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final period = hour < 12 ? '오전' : '오후';
     final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     return '$period $displayHour:$minute';
+  }
+
+  // 1분 이상 차이나면 다른 그룹으로 처리
+  bool _isTimeDifferent(Timestamp? t1, Timestamp? t2) {
+    if (t1 == null || t2 == null) return true;
+    final diff = (t1.seconds - t2.seconds).abs();
+    return diff > 60;
   }
 }

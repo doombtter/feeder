@@ -26,6 +26,7 @@ class UserModel {
   final bool isSuspended;
   final DateTime? suspensionExpiresAt;
   final String? suspensionReason;
+  final bool isDeleted;  // 탈퇴 여부
   // 일일 무료 채팅
   final int dailyFreeChats;  // 오늘 남은 무료 채팅 횟수
   final DateTime? dailyFreeChatsResetAt;  // 무료 채팅 리셋 날짜
@@ -62,6 +63,7 @@ class UserModel {
     this.isSuspended = false,
     this.suspensionExpiresAt,
     this.suspensionReason,
+    this.isDeleted = false,
     this.dailyFreeChats = 1,
     this.dailyFreeChatsResetAt,
     this.hasClaimedRatingReward = false,
@@ -149,6 +151,7 @@ class UserModel {
       isSuspended: data['isSuspended'] ?? false,
       suspensionExpiresAt: (data['suspensionExpiresAt'] as Timestamp?)?.toDate(),
       suspensionReason: data['suspensionReason'],
+      isDeleted: data['isDeleted'] ?? false,
       dailyFreeChats: data['dailyFreeChats'] ?? 1,
       dailyFreeChatsResetAt: (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate(),
       hasClaimedRatingReward: data['hasClaimedRatingReward'] ?? false,
@@ -184,6 +187,7 @@ class UserModel {
       'isSuspended': isSuspended,
       'suspensionExpiresAt': suspensionExpiresAt != null ? Timestamp.fromDate(suspensionExpiresAt!) : null,
       'suspensionReason': suspensionReason,
+      'isDeleted': isDeleted,
       'dailyFreeChats': dailyFreeChats,
       'dailyFreeChatsResetAt': dailyFreeChatsResetAt != null ? Timestamp.fromDate(dailyFreeChatsResetAt!) : null,
       'hasClaimedRatingReward': hasClaimedRatingReward,

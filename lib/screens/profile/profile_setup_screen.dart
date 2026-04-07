@@ -1,10 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import '../../core/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
+import '../../models/user_model.dart';
+import '../feed/home_screen.dart';
+
+/// 프로필 저장 후 HomeScreen으로 이동하는 래퍼
+class _ProfileCheckRedirect extends StatelessWidget {
+  const _ProfileCheckRedirect();
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const ProfileSetupScreen();
+    }
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          );
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>?;
+        if (data == null) {
+          return const ProfileSetupScreen();
+        }
+
+        // isProfileComplete 체크
+        final nickname = data['nickname'] ?? '';
+        final birthYear = data['birthYear'] ?? 0;
+        final gender = data['gender'] ?? '';
+        final region = data['region'] ?? '';
+
+        if (nickname.toString().isNotEmpty && 
+            birthYear > 0 && 
+            gender.toString().isNotEmpty && 
+            region.toString().isNotEmpty) {
+          return const HomeScreen();
+        }
+
+        return const ProfileSetupScreen();
+      },
+    );
+  }
+}
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -130,11 +181,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
       await _userService.setOnlineStatus(uid, true);
 
-      // ProfileCheckWrapper의 StreamBuilder가 자동으로 감지하므로
-      // 별도의 네비게이션 필요 없음
+      // StreamBuilder가 변경을 감지할 때까지 잠시 대기
+      await Future.delayed(const Duration(milliseconds: 500));
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('프로필이 저장되었습니다')),
+        // 명시적으로 AuthWrapper로 돌아가서 다시 체크하도록 함
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const _ProfileCheckRedirect()),
+          (route) => false,
         );
       }
     } catch (e) {

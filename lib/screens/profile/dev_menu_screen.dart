@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/membership_widgets.dart';
+import '../../services/auth_service.dart';
 
 /// 개발자 전용 메뉴 (디버그/테스트용)
 /// 접근 방법: 설정 > 앱 버전 7번 탭
@@ -264,6 +265,125 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
     }
   }
 
+  /// 즉시 탈퇴 (테스트용) - Firebase Auth + Firestore 완전 삭제
+  Future<void> _instantDeleteAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_rounded, color: AppColors.error),
+            const SizedBox(width: 8),
+            const Text('즉시 탈퇴', style: TextStyle(color: AppColors.textPrimary)),
+          ],
+        ),
+        content: const Text(
+          '⚠️ 테스트용 즉시 탈퇴입니다.\n\n'
+          '• Firebase Auth 계정 삭제\n'
+          '• Firestore 유저 문서 삭제\n'
+          '• 탈퇴 기록(deletedAccounts) 삭제\n'
+          '• 로그인 기록 삭제\n\n'
+          '모든 데이터가 완전히 삭제되며\n즉시 재가입이 가능합니다.',
+          style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('삭제', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // 로딩 다이얼로그
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: AppColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppColors.primary),
+              const SizedBox(height: 16),
+              Text('계정 삭제 중...', style: TextStyle(color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+      final uid = user.uid;
+
+      // 1. 유저 문서에서 전화번호 가져오기
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      final phoneNumber = userDoc.data()?['phoneNumber'] ?? '';
+
+      // 2. 로그인 기록 삭제
+      final loginHistory = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('loginHistory')
+          .get();
+      for (final doc in loginHistory.docs) {
+        await doc.reference.delete();
+      }
+
+      // 3. Firestore 유저 문서 삭제
+      await _firestore.collection('users').doc(uid).delete();
+
+      // 4. 탈퇴 기록 삭제 (재가입 즉시 가능하도록)
+      if (phoneNumber.isNotEmpty) {
+        await _firestore.collection('deletedAccounts').doc(phoneNumber).delete();
+      }
+
+      // 5. Firebase Auth 계정 삭제
+      await user.delete();
+
+      debugPrint('✅ 테스트 계정 완전 삭제 완료: $uid');
+
+    } catch (e) {
+      debugPrint('❌ 즉시 탈퇴 실패: $e');
+      
+      if (mounted) {
+        Navigator.pop(context); // 로딩 다이얼로그 닫기
+        
+        // 재인증 필요한 경우
+        if (e.toString().contains('requires-recent-login')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('재인증이 필요합니다. 로그아웃 후 다시 로그인해주세요.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          
+          // 로그아웃만 진행
+          await AuthService().signOut();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('삭제 실패: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -490,6 +610,64 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
                         ],
                       );
                     },
+                  ),
+                ]),
+                const SizedBox(height: 24),
+
+                // 테스트 계정 관리
+                _buildSection('테스트 계정', [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.delete_forever_rounded, color: AppColors.error, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              '즉시 탈퇴 (완전 삭제)',
+                              style: TextStyle(
+                                color: AppColors.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Firebase Auth 계정, Firestore 문서, 탈퇴 기록을 모두 삭제합니다. '
+                          '삭제 후 동일 계정으로 즉시 재가입이 가능합니다.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _instantDeleteAccount,
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            label: const Text('즉시 탈퇴'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.error,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ]),
 
