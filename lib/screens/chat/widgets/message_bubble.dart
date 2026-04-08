@@ -4,17 +4,24 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/message_model.dart';
+import '../../../services/chat_service.dart';
 import 'video_player_screen.dart';
 
 /// 채팅 메시지 버블
 class MessageBubble extends StatefulWidget {
   final MessageModel message;
   final bool isMe;
+  final bool showTime;
+  final String chatRoomId;
+  final VoidCallback? onDeleted;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isMe,
+    this.showTime = true,
+    required this.chatRoomId,
+    this.onDeleted,
   });
 
   @override
@@ -26,11 +33,28 @@ class _MessageBubbleState extends State<MessageBubble> {
   bool _isPlaying = false;
   double _progress = 0.0;
   Timer? _progressTimer;
+  
+  final _chatService = ChatService();
+  bool _ephemeralOpened = false;
+  bool _ephemeralExpired = false;
+  Timer? _ephemeralTimer;
 
   @override
   void initState() {
     super.initState();
     if (widget.message.type == MessageType.voice) _initPlayer();
+    
+    // 펑 메시지 상태 초기화 - 이미 열람되었다면 즉시 만료
+    _ephemeralOpened = widget.message.isEphemeralOpened;
+    if (widget.message.isEphemeral && _ephemeralOpened) {
+      _ephemeralExpired = true; // 이미 열람된 시크릿 메시지는 즉시 만료
+    }
+  }
+
+  // 더 이상 사용하지 않음 - 열람 즉시 만료되므로 시간 체크 불필요
+  void _checkEphemeralExpiry() {
+    // 이미 열람되었으면 즉시 만료
+    _ephemeralExpired = true;
   }
 
   Future<void> _initPlayer() async {
@@ -45,6 +69,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   @override
   void dispose() {
     _progressTimer?.cancel();
+    _ephemeralTimer?.cancel();
     _player?.closePlayer();
     super.dispose();
   }
@@ -101,23 +126,197 @@ class _MessageBubbleState extends State<MessageBubble> {
     return '$min:${sec.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _openEphemeralMessage() async {
+    if (_ephemeralOpened || _ephemeralExpired) return;
+    
+    await _chatService.openEphemeralMessage(widget.chatRoomId, widget.message.id);
+    
+    // 시크릿 미디어 열람 - 전체화면으로 바로 보여주고 닫으면 만료
+    final isVideo = widget.message.type == MessageType.video;
+    
+    if (isVideo) {
+      // 시크릿 동영상: 재생 후 돌아오면 즉시 만료
+      if (widget.message.videoUrl != null) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VideoPlayerScreen(videoUrl: widget.message.videoUrl!),
+          ),
+        );
+      }
+    } else {
+      // 시크릿 사진: 전체화면으로 보고 닫으면 즉시 만료
+      if (widget.message.imageUrl != null) {
+        await showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: InteractiveViewer(
+                child: CachedNetworkImage(
+                  imageUrl: widget.message.imageUrl!,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    
+    // 보기가 끝나면 즉시 만료 처리
+    if (mounted) {
+      setState(() {
+        _ephemeralOpened = true;
+        _ephemeralExpired = true;
+      });
+    }
+  }
+
+  void _showDeleteMenu() {
+    // 내 메시지만 삭제 가능
+    if (!widget.isMe || widget.message.isDeleted) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                title: const Text('삭제하기', style: TextStyle(color: AppColors.error)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDelete();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('메시지 삭제', style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text(
+          '이 메시지를 삭제하시겠습니까?\n상대방에게도 삭제된 메시지로 표시됩니다.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _chatService.deleteMessage(widget.chatRoomId, widget.message.id);
+              widget.onDeleted?.call();
+            },
+            child: const Text('삭제', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 삭제된 메시지
+    if (widget.message.isDeleted) {
+      return _buildDeletedBubble();
+    }
+    
+    return GestureDetector(
+      onLongPress: _showDeleteMenu,
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: widget.showTime ? 4 : 1),
+        child: Row(
+          mainAxisAlignment: widget.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (widget.isMe && widget.showTime) ...[
+              Text(
+                widget.message.timeText,
+                style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Flexible(child: _buildBubble()),
+            if (!widget.isMe && widget.showTime) ...[
+              const SizedBox(width: 4),
+              Text(
+                widget.message.timeText,
+                style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeletedBubble() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: widget.showTime ? 4 : 1),
       child: Row(
         mainAxisAlignment: widget.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (widget.isMe) ...[
+          if (widget.isMe && widget.showTime) ...[
             Text(
               widget.message.timeText,
               style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
             ),
             const SizedBox(width: 4),
           ],
-          Flexible(child: _buildBubble()),
-          if (!widget.isMe) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.block_rounded, size: 14, color: AppColors.textTertiary),
+                const SizedBox(width: 6),
+                Text(
+                  '삭제된 메시지',
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!widget.isMe && widget.showTime) ...[
             const SizedBox(width: 4),
             Text(
               widget.message.timeText,
@@ -130,6 +329,11 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildBubble() {
+    // 펑 메시지 처리
+    if (widget.message.isEphemeral) {
+      return _buildEphemeralBubble();
+    }
+    
     switch (widget.message.type) {
       case MessageType.image:
         return _buildImageBubble();
@@ -139,6 +343,142 @@ class _MessageBubbleState extends State<MessageBubble> {
         return _buildVideoBubble();
       default:
         return _buildTextBubble();
+    }
+  }
+
+  Widget _buildEphemeralBubble() {
+    final isImage = widget.message.type == MessageType.image;
+    final isVideo = widget.message.type == MessageType.video;
+    
+    // 만료된 시크릿 메시지
+    if (_ephemeralExpired) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_rounded, size: 16, color: AppColors.textTertiary),
+            const SizedBox(width: 8),
+            Text(
+              isVideo ? '시크릿 영상이 사라졌어요' : '시크릿 사진이 사라졌어요',
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // 열리지 않은 시크릿 메시지 (상대방이 보내온 것만 탭 가능)
+    if (!_ephemeralOpened && !widget.isMe) {
+      return GestureDetector(
+        onTap: _openEphemeralMessage,
+        child: Container(
+          width: 180,
+          height: 180,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF6B6B).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B6B).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.lock_rounded,
+                  size: 32,
+                  color: const Color(0xFFFF6B6B),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isVideo ? '시크릿 영상' : '시크릿 사진',
+                style: const TextStyle(
+                  color: Color(0xFFFF6B6B),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '탭해서 열기',
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // 열린 시크릿 메시지 또는 내가 보낸 시크릿 메시지
+    if (isVideo) {
+      return Stack(
+        children: [
+          _buildVideoBubble(),
+          // 시크릿 표시
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6B6B),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.lock_rounded, size: 12, color: Colors.white),
+                  SizedBox(width: 4),
+                  Text('시크릿', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      return Stack(
+        children: [
+          _buildImageBubble(),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6B6B),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.lock_rounded, size: 12, color: Colors.white),
+                  SizedBox(width: 4),
+                  Text('시크릿', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
     }
   }
 

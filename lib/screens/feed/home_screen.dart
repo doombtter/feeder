@@ -1013,6 +1013,7 @@ class _PostCardState extends State<_PostCard> {
                             builder: (context) => ChatRequestDialog(
                               toUserId: widget.post.authorId,
                               toUserNickname: _postNickname,
+                              toUserGender: widget.post.authorGender,
                               fromUser: myUser,
                             ),
                           );
@@ -1113,6 +1114,7 @@ class _PostCardState extends State<_PostCard> {
                         builder: (context) => ChatRequestDialog(
                           toUserId: widget.post.authorId,
                           toUserNickname: _postNickname,
+                          toUserGender: widget.post.authorGender,
                           fromUser: myUser,
                         ),
                       );

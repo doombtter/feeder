@@ -281,6 +281,7 @@ class _ShotItemState extends State<ShotItem> {
         builder: (context) => ChatRequestDialog(
           toUserId: widget.shot.authorId,
           toUserNickname: '익명',
+          toUserGender: widget.shot.authorGender,
           fromUser: myUser,
         ),
       );

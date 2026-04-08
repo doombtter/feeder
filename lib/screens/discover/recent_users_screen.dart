@@ -157,6 +157,7 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
       builder: (context) => ChatRequestDialog(
         toUserId: targetUser.uid,
         toUserNickname: targetUser.nickname,
+        toUserGender: targetUser.gender,
         fromUser: _currentUser!,
       ),
     );

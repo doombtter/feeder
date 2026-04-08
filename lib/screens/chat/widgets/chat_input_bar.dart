@@ -7,6 +7,15 @@ import '../../../core/widgets/membership_widgets.dart';
 import '../../../services/s3_service.dart';
 import '../../../services/chat_service.dart';
 
+/// 미디어 타입
+enum MediaType {
+  photo,
+  video,
+  ephemeralPhoto,
+  ephemeralVideo,
+  voice,
+}
+
 /// 채팅 입력 바
 class ChatInputBar extends StatefulWidget {
   final String chatRoomId;
@@ -14,6 +23,7 @@ class ChatInputBar extends StatefulWidget {
   final MembershipTier myMembershipTier;
   final bool isOtherPremium;
   final VoidCallback? onVideoTap;
+  final Future<void> Function(bool isEphemeral)? onEphemeralVideoTap;
 
   const ChatInputBar({
     super.key,
@@ -22,13 +32,14 @@ class ChatInputBar extends StatefulWidget {
     required this.myMembershipTier,
     required this.isOtherPremium,
     this.onVideoTap,
+    this.onEphemeralVideoTap,
   });
 
   @override
   State<ChatInputBar> createState() => _ChatInputBarState();
 }
 
-class _ChatInputBarState extends State<ChatInputBar> {
+class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderStateMixin {
   final _messageController = TextEditingController();
   final _chatService = ChatService();
   final _voiceController = VoiceRecordingController(
@@ -37,12 +48,47 @@ class _ChatInputBarState extends State<ChatInputBar> {
   );
   
   bool _isSending = false;
+  bool _showMediaMenu = false;
+  late AnimationController _menuAnimationController;
+  late Animation<double> _menuAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _menuAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _menuAnimation = CurvedAnimation(
+      parent: _menuAnimationController,
+      curve: Curves.easeOut,
+    );
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
     _voiceController.dispose();
+    _menuAnimationController.dispose();
     super.dispose();
+  }
+
+  void _toggleMediaMenu() {
+    setState(() {
+      _showMediaMenu = !_showMediaMenu;
+      if (_showMediaMenu) {
+        _menuAnimationController.forward();
+      } else {
+        _menuAnimationController.reverse();
+      }
+    });
+  }
+
+  void _closeMediaMenu() {
+    if (_showMediaMenu) {
+      setState(() => _showMediaMenu = false);
+      _menuAnimationController.reverse();
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -75,7 +121,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
     }
   }
 
-  Future<void> _pickAndSendImage() async {
+  Future<void> _pickAndSendImage({bool isEphemeral = false}) async {
+    _closeMediaMenu();
+    
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
@@ -100,6 +148,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
         content: '',
         imageUrl: imageUrl,
         type: 'image',
+        isEphemeral: isEphemeral,
       );
     } catch (e) {
       if (mounted) {
@@ -112,7 +161,17 @@ class _ChatInputBarState extends State<ChatInputBar> {
     }
   }
 
+  void _handleVideoTap({bool isEphemeral = false}) {
+    _closeMediaMenu();
+    if (isEphemeral) {
+      widget.onEphemeralVideoTap?.call(true);
+    } else {
+      widget.onVideoTap?.call();
+    }
+  }
+
   Future<void> _startRecording() async {
+    _closeMediaMenu();
     final success = await _voiceController.startRecording();
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -161,26 +220,95 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border(top: BorderSide(color: AppColors.border.withValues(alpha:0.5))),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: ListenableBuilder(
-            listenable: _voiceController,
-            builder: (context, _) {
-              switch (_voiceController.state) {
-                case VoiceRecordingState.recording:
-                  return _buildRecordingUI();
-                case VoiceRecordingState.preview:
-                  return _buildPreviewUI();
-                default:
-                  return _buildTextInputUI();
-              }
-            },
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 미디어 메뉴
+        if (_showMediaMenu) _buildMediaMenu(),
+        
+        // 입력 바
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            border: Border(top: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: ListenableBuilder(
+                listenable: _voiceController,
+                builder: (context, _) {
+                  switch (_voiceController.state) {
+                    case VoiceRecordingState.recording:
+                      return _buildRecordingUI();
+                    case VoiceRecordingState.preview:
+                      return _buildPreviewUI();
+                    default:
+                      return _buildTextInputUI();
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMediaMenu() {
+    final canSendVideo = widget.myMembershipTier != MembershipTier.free || widget.isOtherPremium;
+    
+    return FadeTransition(
+      opacity: _menuAnimation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.5),
+          end: Offset.zero,
+        ).animate(_menuAnimation),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            border: Border(top: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _MediaMenuItem(
+                icon: Icons.image_rounded,
+                label: '사진',
+                color: AppColors.primary,
+                onTap: () => _pickAndSendImage(isEphemeral: false),
+              ),
+              if (canSendVideo)
+                _MediaMenuItem(
+                  icon: Icons.videocam_rounded,
+                  label: '영상',
+                  color: AppColors.primary,
+                  onTap: () => _handleVideoTap(isEphemeral: false),
+                ),
+              _MediaMenuItem(
+                icon: Icons.lock_rounded,
+                label: '시크릿 사진',
+                color: const Color(0xFFFF6B6B),
+                onTap: () => _pickAndSendImage(isEphemeral: true),
+              ),
+              if (canSendVideo)
+                _MediaMenuItem(
+                  icon: Icons.lock_rounded,
+                  label: '시크릿 영상',
+                  color: const Color(0xFFFF6B6B),
+                  secondaryIcon: Icons.videocam_rounded,
+                  onTap: () => _handleVideoTap(isEphemeral: true),
+                ),
+              _MediaMenuItem(
+                icon: Icons.mic_rounded,
+                label: '음성',
+                color: AppColors.primary,
+                onTap: _startRecording,
+              ),
+            ],
           ),
         ),
       ),
@@ -188,38 +316,29 @@ class _ChatInputBarState extends State<ChatInputBar> {
   }
 
   Widget _buildTextInputUI() {
-    final canSendVideo = widget.myMembershipTier != MembershipTier.free || widget.isOtherPremium;
-
     return Row(
       children: [
-        // 이미지 버튼
-        _CircleIconButton(
-          icon: Icons.image_rounded,
-          onTap: _isSending ? null : _pickAndSendImage,
-          color: _isSending ? AppColors.textTertiary : AppColors.primary,
-        ),
-        const SizedBox(width: 6),
-        // 동영상 버튼
-        if (canSendVideo) ...[
-          _CircleIconButton(
-            icon: Icons.videocam_rounded,
-            onTap: _isSending ? null : widget.onVideoTap,
-            color: _isSending
-                ? AppColors.textTertiary
-                : (widget.myMembershipTier != MembershipTier.free
-                    ? widget.myMembershipTier.color
-                    : AppColors.primary),
-            backgroundColor: widget.myMembershipTier != MembershipTier.free
-                ? widget.myMembershipTier.color.withValues(alpha:0.15)
-                : AppColors.surface,
+        // + 버튼 (미디어 메뉴 토글)
+        GestureDetector(
+          onTap: _isSending ? null : _toggleMediaMenu,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _showMediaMenu ? AppColors.primary : AppColors.surface,
+            ),
+            child: AnimatedRotation(
+              turns: _showMediaMenu ? 0.125 : 0, // 45도 회전
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                Icons.add_rounded,
+                color: _showMediaMenu ? Colors.white : AppColors.primary,
+                size: 24,
+              ),
+            ),
           ),
-          const SizedBox(width: 6),
-        ],
-        // 마이크 버튼
-        _CircleIconButton(
-          icon: Icons.mic_rounded,
-          onTap: _isSending ? null : _startRecording,
-          color: _isSending ? AppColors.textTertiary : AppColors.primary,
         ),
         const SizedBox(width: 8),
         // 텍스트 입력
@@ -228,6 +347,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
             controller: _messageController,
             style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
             textAlignVertical: TextAlignVertical.center,
+            onTap: _closeMediaMenu,
             decoration: InputDecoration(
               hintText: '메시지를 입력하세요',
               hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 15),
@@ -297,32 +417,66 @@ class _ChatInputBarState extends State<ChatInputBar> {
   }
 }
 
-/// 원형 아이콘 버튼
-class _CircleIconButton extends StatelessWidget {
+/// 미디어 메뉴 아이템
+class _MediaMenuItem extends StatelessWidget {
   final IconData icon;
-  final VoidCallback? onTap;
+  final String label;
   final Color color;
-  final Color backgroundColor;
+  final IconData? secondaryIcon;
+  final VoidCallback onTap;
 
-  const _CircleIconButton({
+  const _MediaMenuItem({
     required this.icon,
-    this.onTap,
+    required this.label,
     required this.color,
-    this.backgroundColor = AppColors.surface,
+    this.secondaryIcon,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: backgroundColor,
-        ),
-        child: Icon(icon, color: color, size: 22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(icon, color: color, size: 26),
+                if (secondaryIcon != null)
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(secondaryIcon, color: Colors.white, size: 10),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -103,82 +103,114 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ),
                 itemBuilder: (context, index) {
                   final room = chatRooms[index];
-                  final otherProfile = room.getOtherProfile(_uid);
+                  final otherUserId = room.getOtherUid(_uid);
+                  final fallbackProfile = room.getOtherProfile(_uid);
                   final unreadCount = room.getUnreadCount(_uid);
 
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    leading: _buildProfileImage(otherProfile?.profileImageUrl ?? ''),
-                    title: Row(
-                      children: [
-                        Text(
-                          otherProfile?.nickname ?? '알 수 없음',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                            color: AppColors.textPrimary,
-                          ),
+                  // 상대방의 실시간 프로필 정보 가져오기
+                  return StreamBuilder<DocumentSnapshot>(
+                    stream: _firestore.collection('users').doc(otherUserId).snapshots(),
+                    builder: (context, userSnapshot) {
+                      String? nickname;
+                      String? profileImageUrl;
+                      String? gender;
+                      
+                      if (userSnapshot.hasData && userSnapshot.data!.exists) {
+                        final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+                        if (userData != null) {
+                          nickname = userData['nickname'] as String?;
+                          profileImageUrl = userData['profileImageUrl'] as String?;
+                          gender = userData['gender'] as String?;
+                        }
+                      }
+                      
+                      // 실시간 데이터가 없으면 채팅방에 저장된 프로필 사용
+                      final displayNickname = nickname ?? fallbackProfile?.nickname ?? '알 수 없음';
+                      final displayProfileUrl = profileImageUrl ?? fallbackProfile?.profileImageUrl ?? '';
+                      final displayGender = gender ?? fallbackProfile?.gender ?? '';
+                      
+                      String genderText = '';
+                      if (displayGender == 'male') {
+                        genderText = '남자';
+                      } else if (displayGender == 'female') {
+                        genderText = '여자';
+                      }
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          otherProfile?.genderText ?? '',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    subtitle: Text(
-                      room.lastMessage.isEmpty ? '대화를 시작해보세요' : room.lastMessage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (room.lastMessageAt != null)
-                          Text(
-                            _formatTime(room.lastMessageAt!),
-                            style: TextStyle(
-                              color: AppColors.textTertiary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        if (unreadCount > 0) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              unreadCount > 99 ? '99+' : '$unreadCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                        leading: _buildProfileImage(displayProfileUrl),
+                        title: Row(
+                          children: [
+                            Text(
+                              displayNickname,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatRoomScreen(chatRoomId: room.id),
+                            const SizedBox(width: 8),
+                            Text(
+                              genderText,
+                              style: TextStyle(
+                                color: AppColors.textTertiary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
+                        subtitle: Text(
+                          room.lastMessage.isEmpty ? '대화를 시작해보세요' : room.lastMessage,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (room.lastMessageAt != null)
+                              Text(
+                                _formatTime(room.lastMessageAt!),
+                                style: TextStyle(
+                                  color: AppColors.textTertiary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            if (unreadCount > 0) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  unreadCount > 99 ? '99+' : '$unreadCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatRoomScreen(chatRoomId: room.id),
+                            ),
+                          );
+                        },
                       );
                     },
                   );

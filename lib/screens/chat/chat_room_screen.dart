@@ -49,6 +49,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   String? _otherUserId;
   bool _isOtherPremium = false;
   MembershipTier _myMembershipTier = MembershipTier.free;
+  
+  // 새 메시지 알림 버튼 관련
+  bool _showNewMessageButton = false;
+  int _newMessageCount = 0;
+  bool _isAtBottom = true;
 
   @override
   void initState() {
@@ -87,6 +92,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         .getNewMessages(widget.chatRoomId, _newestMessageTime!)
         .listen((newMessages) {
       if (newMessages.isNotEmpty && mounted) {
+        final hasNewFromOther = newMessages.any((m) => m.senderId != _uid);
+        
         setState(() {
           // 중복 제거 후 추가
           for (final msg in newMessages) {
@@ -95,6 +102,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             }
           }
           _newestMessageTime = _messages.last.createdAt;
+          
+          // 맨 아래가 아닐 때 새 메시지가 오면 버튼 표시
+          if (!_isAtBottom && hasNewFromOther) {
+            _showNewMessageButton = true;
+            _newMessageCount += newMessages.where((m) => m.senderId != _uid).length;
+          }
         });
         
         // 새 메시지 읽음 처리
@@ -104,10 +117,35 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _onScroll() {
+    // 맨 아래 감지 (reverse: true이므로 pixels가 0에 가까울수록 맨 아래)
+    final isAtBottom = _scrollController.position.pixels < 50;
+    
+    if (isAtBottom != _isAtBottom) {
+      setState(() {
+        _isAtBottom = isAtBottom;
+        if (isAtBottom) {
+          _showNewMessageButton = false;
+          _newMessageCount = 0;
+        }
+      });
+    }
+    
     // 상단에 도달하면 이전 메시지 로드
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 100) {
       _loadMoreMessages();
     }
+  }
+
+  void _scrollToBottom() {
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+    setState(() {
+      _showNewMessageButton = false;
+      _newMessageCount = 0;
+    });
   }
 
   Future<void> _loadMoreMessages() async {
@@ -177,6 +215,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
+  /// 같은 사람이 1분 이내 연속 메시지인지 확인
+  bool _isConsecutiveMessage(MessageModel current, MessageModel? next) {
+    if (next == null) return false;
+    if (current.senderId != next.senderId) return false;
+    
+    final diff = next.createdAt.difference(current.createdAt).abs();
+    return diff.inMinutes < 1;
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<ChatRoomModel>>(
@@ -198,7 +245,52 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           body: Column(
             children: [
               Expanded(
-                child: _buildMessageList(),
+                child: Stack(
+                  children: [
+                    _buildMessageList(),
+                    // 새 메시지 알림 버튼
+                    if (_showNewMessageButton)
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: _scrollToBottom,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.arrow_downward_rounded, color: Colors.white, size: 16),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    '새 메시지',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               // 입력 바
               ChatInputBar(
@@ -207,6 +299,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 myMembershipTier: _myMembershipTier,
                 isOtherPremium: _isOtherPremium,
                 onVideoTap: _pickAndSendVideo,
+                onEphemeralVideoTap: _pickAndSendEphemeralVideo,
               ),
             ],
           ),
@@ -255,6 +348,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         final message = messages[reversedIndex];
         final isMe = message.senderId == _uid;
 
+        // 다음 메시지 (시간순으로 다음 = 화면상 아래)
+        final nextMessage = reversedIndex < messages.length - 1 
+            ? messages[reversedIndex + 1] 
+            : null;
+        
+        // 연속 메시지면 시간 숨김
+        final showTime = !_isConsecutiveMessage(message, nextMessage);
+
         Widget? dateDivider;
         if (reversedIndex == 0 || !_isSameDay(messages[reversedIndex - 1].createdAt, message.createdAt)) {
           dateDivider = _buildDateDivider(message.createdAt);
@@ -263,7 +364,21 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         return Column(
           children: [
             if (dateDivider != null) dateDivider,
-            MessageBubble(message: message, isMe: isMe),
+            MessageBubble(
+              message: message, 
+              isMe: isMe, 
+              showTime: showTime,
+              chatRoomId: widget.chatRoomId,
+              onDeleted: () {
+                // 삭제된 메시지 즉시 UI에서 제거
+                setState(() {
+                  final index = _messages.indexWhere((m) => m.id == message.id);
+                  if (index != -1) {
+                    _messages[index] = message.copyWith(isDeleted: true);
+                  }
+                });
+              },
+            ),
           ],
         );
       },
@@ -589,5 +704,148 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ],
       ),
     );
+  }
+
+  // ── 펑 동영상 전송 로직
+  Future<void> _pickAndSendEphemeralVideo(bool isEphemeral) async {
+    if (_otherUserId == null || _otherUserId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('상대방 정보를 불러오는 중입니다')),
+      );
+      return;
+    }
+
+    final permission = await _videoService.checkVideoPermission(
+      chatRoomId: widget.chatRoomId,
+      otherUserId: _otherUserId!,
+      isOtherPremium: _isOtherPremium,
+    );
+
+    if (!permission.canSend) {
+      _showVideoPermissionDialog(permission);
+      return;
+    }
+
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(seconds: 180),
+    );
+
+    if (pickedFile == null) return;
+
+    final progressNotifier = ValueNotifier<double>(0.0);
+    final statusNotifier = ValueNotifier<String>('압축 준비 중...');
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => VideoProgressDialog(
+          progressNotifier: progressNotifier,
+          statusNotifier: statusNotifier,
+        ),
+      );
+    }
+
+    try {
+      final originalFile = File(pickedFile.path);
+
+      statusNotifier.value = '동영상 압축 중...';
+
+      final subscription = VideoCompress.compressProgress$.subscribe((progress) {
+        progressNotifier.value = progress / 100 * 0.5;
+      });
+
+      final compressedInfo = await VideoCompress.compressVideo(
+        originalFile.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+        includeAudio: true,
+      );
+
+      subscription.unsubscribe();
+
+      if (compressedInfo == null || compressedInfo.file == null) {
+        throw Exception('동영상 압축 실패');
+      }
+
+      final compressedFile = compressedInfo.file!;
+      final compressedSizeMB = await compressedFile.length() / (1024 * 1024);
+
+      if (compressedSizeMB > VideoQuotaConstants.maxVideoSizeMB) {
+        throw Exception('압축 후에도 동영상이 ${VideoQuotaConstants.maxVideoSizeMB}MB를 초과합니다');
+      }
+
+      statusNotifier.value = '썸네일 생성 중...';
+      progressNotifier.value = 0.55;
+
+      final thumbnailFile = await VideoCompress.getFileThumbnail(
+        originalFile.path,
+        quality: 70,
+        position: -1,
+      );
+
+      final duration = compressedInfo.duration != null
+          ? (compressedInfo.duration! / 1000).round()
+          : 0;
+
+      statusNotifier.value = '동영상 업로드 중...';
+
+      final videoUrl = await _videoService.uploadChatVideo(
+        file: compressedFile,
+        chatRoomId: widget.chatRoomId,
+        duration: duration,
+        onProgress: (progress) {
+          progressNotifier.value = 0.5 + (progress * 0.45);
+        },
+      );
+
+      if (videoUrl == null) throw Exception('동영상 업로드 실패');
+
+      statusNotifier.value = '마무리 중...';
+      progressNotifier.value = 0.95;
+
+      String? thumbnailUrl;
+      thumbnailUrl = await S3Service.uploadChatImage(thumbnailFile, chatRoomId: widget.chatRoomId);
+    
+      await _videoService.useVideoQuota(
+        chatRoomId: widget.chatRoomId,
+        isOtherPremium: _isOtherPremium,
+      );
+
+      await _chatService.sendMessage(
+        chatRoomId: widget.chatRoomId,
+        senderId: _uid,
+        content: '',
+        videoUrl: videoUrl,
+        videoThumbnailUrl: thumbnailUrl,
+        videoDuration: duration,
+        type: 'video',
+        isEphemeral: true,
+      );
+
+      progressNotifier.value = 1.0;
+      await VideoCompress.deleteAllCache();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('펑 영상 전송 완료'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      await VideoCompress.deleteAllCache();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('동영상 전송 실패: $e')),
+        );
+      }
+    }
   }
 }

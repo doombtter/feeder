@@ -18,6 +18,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.feeder.feeder"
     compileSdk = 36
+    
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

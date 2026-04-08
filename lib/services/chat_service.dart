@@ -358,6 +358,7 @@ class ChatService {
     int? voiceDuration,
     int? videoDuration,
     String type = 'text',
+    bool isEphemeral = false, // 펑 메시지 여부
   }) async {
     // 채팅방 정보 확인
     final roomDoc = await _firestore.collection('chatRooms').doc(chatRoomId).get();
@@ -393,6 +394,9 @@ class ChatService {
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
       'isDeleted': false,
+      'isEphemeral': isEphemeral,
+      'isEphemeralOpened': false,
+      'ephemeralOpenedAt': null,
     });
 
     // 상대방 ID 찾기
@@ -405,9 +409,9 @@ class ChatService {
     if (type == 'voice') {
       lastMessageText = '🎤 음성 메시지';
     } else if (type == 'image') {
-      lastMessageText = '📷 사진';
+      lastMessageText = isEphemeral ? '🔒 시크릿 사진' : '📷 사진';
     } else if (type == 'video') {
-      lastMessageText = '🎬 동영상';
+      lastMessageText = isEphemeral ? '🔒 시크릿 영상' : '🎬 동영상';
     }
     
     final updateData = <String, dynamic>{
@@ -437,6 +441,36 @@ class ChatService {
     }
 
     return true;
+  }
+
+  /// 펑 메시지 열람 처리
+  Future<void> openEphemeralMessage(String chatRoomId, String messageId) async {
+    await _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .doc(messageId)
+        .update({
+      'isEphemeralOpened': true,
+      'ephemeralOpenedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// 메시지 삭제 (소프트 삭제)
+  Future<void> deleteMessage(String chatRoomId, String messageId) async {
+    await _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .collection('messages')
+        .doc(messageId)
+        .update({
+      'isDeleted': true,
+      'content': '',
+      'imageUrl': null,
+      'voiceUrl': null,
+      'videoUrl': null,
+      'videoThumbnailUrl': null,
+    });
   }
 
   // 메시지 읽음 처리

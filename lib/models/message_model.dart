@@ -16,6 +16,9 @@ class MessageModel {
   final bool isRead;
   final DateTime createdAt;
   final bool isDeleted;
+  final bool isEphemeral; // 시크릿 메시지 여부
+  final bool isEphemeralOpened; // 시크릿 메시지 열람 여부
+  final DateTime? ephemeralOpenedAt; // 시크릿 메시지 열람 시간
 
   MessageModel({
     required this.id,
@@ -31,6 +34,9 @@ class MessageModel {
     this.isRead = false,
     required this.createdAt,
     this.isDeleted = false,
+    this.isEphemeral = false,
+    this.isEphemeralOpened = false,
+    this.ephemeralOpenedAt,
   });
 
   factory MessageModel.fromFirestore(DocumentSnapshot doc) {
@@ -59,6 +65,9 @@ class MessageModel {
       isRead: data['isRead'] ?? false,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isDeleted: data['isDeleted'] ?? false,
+      isEphemeral: data['isEphemeral'] ?? false,
+      isEphemeralOpened: data['isEphemeralOpened'] ?? false,
+      ephemeralOpenedAt: (data['ephemeralOpenedAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -76,6 +85,11 @@ class MessageModel {
       'isRead': isRead,
       'createdAt': Timestamp.fromDate(createdAt),
       'isDeleted': isDeleted,
+      'isEphemeral': isEphemeral,
+      'isEphemeralOpened': isEphemeralOpened,
+      'ephemeralOpenedAt': ephemeralOpenedAt != null 
+          ? Timestamp.fromDate(ephemeralOpenedAt!) 
+          : null,
     };
   }
 
@@ -92,5 +106,53 @@ class MessageModel {
     final minutes = voiceDuration! ~/ 60;
     final seconds = voiceDuration! % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// 시크릿 메시지가 만료되었는지 (열람 후 일정 시간 경과)
+  bool get isEphemeralExpired {
+    if (!isEphemeral || !isEphemeralOpened || ephemeralOpenedAt == null) {
+      return false;
+    }
+    // 열람 후 10초 후 만료
+    return DateTime.now().difference(ephemeralOpenedAt!).inSeconds > 10;
+  }
+
+  /// copyWith 메서드 - 메시지 객체 복사 및 일부 필드 변경
+  MessageModel copyWith({
+    String? id,
+    String? senderId,
+    String? content,
+    String? imageUrl,
+    String? voiceUrl,
+    String? videoUrl,
+    String? videoThumbnailUrl,
+    int? voiceDuration,
+    int? videoDuration,
+    MessageType? type,
+    bool? isRead,
+    DateTime? createdAt,
+    bool? isDeleted,
+    bool? isEphemeral,
+    bool? isEphemeralOpened,
+    DateTime? ephemeralOpenedAt,
+  }) {
+    return MessageModel(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      content: content ?? this.content,
+      imageUrl: imageUrl ?? this.imageUrl,
+      voiceUrl: voiceUrl ?? this.voiceUrl,
+      videoUrl: videoUrl ?? this.videoUrl,
+      videoThumbnailUrl: videoThumbnailUrl ?? this.videoThumbnailUrl,
+      voiceDuration: voiceDuration ?? this.voiceDuration,
+      videoDuration: videoDuration ?? this.videoDuration,
+      type: type ?? this.type,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isEphemeral: isEphemeral ?? this.isEphemeral,
+      isEphemeralOpened: isEphemeralOpened ?? this.isEphemeralOpened,
+      ephemeralOpenedAt: ephemeralOpenedAt ?? this.ephemeralOpenedAt,
+    );
   }
 }

@@ -93,6 +93,7 @@ class _ShotLikersScreenState extends State<ShotLikersScreen> {
       builder: (context) => ChatRequestDialog(
         toUserId: targetUser.uid,
         toUserNickname: targetUser.nickname,
+        toUserGender: targetUser.gender,
         fromUser: _currentUser!,
       ),
     );

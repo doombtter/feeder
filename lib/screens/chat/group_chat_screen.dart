@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
+import '../../services/chat_service.dart';
 import '../../services/user_service.dart';
 import '../../models/user_model.dart';
 
@@ -30,6 +31,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   
   UserModel? _currentUser;
   int _participantCount = 0;
+  
+  // 익명 번호 매핑 (senderId -> 익명 번호)
+  final Map<String, int> _anonymousNumbers = {};
+  int _nextAnonymousNumber = 1;
 
   @override
   void initState() {
@@ -52,6 +57,21 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         _currentUser = user;
       });
     }
+  }
+
+  /// 유저 ID에 대한 익명 번호 반환 (같은 유저는 같은 번호)
+  int _getAnonymousNumber(String senderId) {
+    if (!_anonymousNumbers.containsKey(senderId)) {
+      _anonymousNumbers[senderId] = _nextAnonymousNumber++;
+    }
+    return _anonymousNumbers[senderId]!;
+  }
+
+  /// 익명 이름 반환
+  String _getAnonymousName(String senderId) {
+    if (senderId == _uid) return '나';
+    if (senderId == 'admin') return '운영자';
+    return '익명${_getAnonymousNumber(senderId)}';
   }
 
   Future<void> _markAsJoined() async {
@@ -288,11 +308,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     bool isFirstInGroup = true,
     bool isLastInGroup = true,
   }) {
-    final nickname = message['senderNickname'] ?? '익명';
+    final senderId = message['senderId'] ?? '';
     final gender = message['senderGender'] ?? 'male';
     final content = message['content'] ?? '';
-    final profileUrl = message['senderProfileUrl'];
     final createdAt = (message['createdAt'] as Timestamp?)?.toDate();
+    
+    // 익명 이름 사용
+    final anonymousName = _getAnonymousName(senderId);
 
     if (isAdmin) {
       // 운영자 메시지 (시스템 알림 스타일)
@@ -339,124 +361,263 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     // 연속 메시지일 때 더 작은 마진
     final topPadding = isFirstInGroup ? 6.0 : 1.5;
     
-    return Padding(
-      padding: EdgeInsets.only(top: topPadding),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          // 프로필 이미지 (첫 메시지만, 다른 사람만)
-          if (!isMe) ...[
-            if (isFirstInGroup)
-              _buildAvatar(profileUrl, gender)
-            else
-              const SizedBox(width: 36), // 아바타 자리 유지
-            const SizedBox(width: 6),
-          ],
-          
-          // 메시지 내용
-          Flexible(
-            child: Column(
-              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                // 닉네임 (첫 메시지만, 다른 사람만)
-                if (!isMe && isFirstInGroup)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 2, bottom: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          nickname,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
+    return GestureDetector(
+      onTap: !isMe ? () => _showUserActionSheet(senderId, anonymousName, gender) : null,
+      child: Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: Row(
+          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // 익명 아바타 (첫 메시지만, 다른 사람만) - 프로필 사진 대신 기본 아바타
+            if (!isMe) ...[
+              if (isFirstInGroup)
+                _buildAnonymousAvatar(gender)
+              else
+                const SizedBox(width: 36), // 아바타 자리 유지
+              const SizedBox(width: 6),
+            ],
+            
+            // 메시지 내용
+            Flexible(
+              child: Column(
+                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  // 익명 이름 (첫 메시지만, 다른 사람만)
+                  if (!isMe && isFirstInGroup)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2, bottom: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            anonymousName,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 3),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
-                          decoration: BoxDecoration(
-                            color: gender == 'male' ? AppColors.maleBg : AppColors.femaleBg,
-                            borderRadius: BorderRadius.circular(3),
+                          const SizedBox(width: 3),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
+                            decoration: BoxDecoration(
+                              color: gender == 'male' ? AppColors.maleBg : AppColors.femaleBg,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              gender == 'male' ? '남' : '여',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: gender == 'male' ? AppColors.male : AppColors.female,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+                  
+                  // 버블 + 시간을 Row로 배치
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (isMe && isLastInGroup && createdAt != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4, bottom: 2),
                           child: Text(
-                            gender == 'male' ? '남' : '여',
+                            _formatTime(createdAt),
                             style: TextStyle(
                               fontSize: 9,
-                              color: gender == 'male' ? AppColors.male : AppColors.female,
-                              fontWeight: FontWeight.w600,
+                              color: AppColors.textTertiary,
                             ),
+                          ),
+                        ),
+                      Flexible(
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.65,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: isMe ? AppColors.primary : AppColors.card,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(16),
+                              topRight: const Radius.circular(16),
+                              bottomLeft: Radius.circular(isMe ? 16 : (isLastInGroup ? 4 : 16)),
+                              bottomRight: Radius.circular(isMe ? (isLastInGroup ? 4 : 16) : 16),
+                            ),
+                            border: isMe ? null : Border.all(color: AppColors.border.withValues(alpha:0.4)),
+                          ),
+                          child: Text(
+                            content,
+                            style: TextStyle(
+                              color: isMe ? Colors.white : AppColors.textPrimary,
+                              fontSize: 14,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!isMe && isLastInGroup && createdAt != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 2),
+                          child: Text(
+                            _formatTime(createdAt),
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            if (isMe) const SizedBox(width: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 익명 아바타 (프로필 사진 대신 성별에 따른 기본 아바타)
+  Widget _buildAnonymousAvatar(String gender) {
+    return CircleAvatar(
+      radius: 18,
+      backgroundColor: gender == 'male' ? AppColors.maleBg : AppColors.femaleBg,
+      child: Icon(
+        Icons.person,
+        size: 18,
+        color: gender == 'male' ? AppColors.male : AppColors.female,
+      ),
+    );
+  }
+
+  /// 유저 액션 시트 (친구 신청)
+  void _showUserActionSheet(String targetUserId, String anonymousName, String gender) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // 익명 프로필 헤더
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    _buildAnonymousAvatar(gender),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          anonymousName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          gender == 'male' ? '남성' : '여성',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                
-                // 버블 + 시간을 Row로 배치
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (isMe && isLastInGroup && createdAt != null)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4, bottom: 2),
-                        child: Text(
-                          _formatTime(createdAt),
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: AppColors.textTertiary,
-                          ),
-                        ),
-                      ),
-                    Flexible(
-                      child: Container(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.65,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: isMe ? AppColors.primary : AppColors.card,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(16),
-                            topRight: const Radius.circular(16),
-                            bottomLeft: Radius.circular(isMe ? 16 : (isLastInGroup ? 4 : 16)),
-                            bottomRight: Radius.circular(isMe ? (isLastInGroup ? 4 : 16) : 16),
-                          ),
-                          border: isMe ? null : Border.all(color: AppColors.border.withValues(alpha:0.4)),
-                        ),
-                        child: Text(
-                          content,
-                          style: TextStyle(
-                            color: isMe ? Colors.white : AppColors.textPrimary,
-                            fontSize: 14,
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (!isMe && isLastInGroup && createdAt != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 2),
-                        child: Text(
-                          _formatTime(createdAt),
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: AppColors.textTertiary,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const Divider(height: 16),
+              ListTile(
+                leading: Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primary),
+                title: const Text('채팅 신청하기', style: TextStyle(color: AppColors.textPrimary)),
+                subtitle: Text(
+                  '상대방이 수락하면 1:1 채팅을 할 수 있어요',
+                  style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendChatRequest(targetUserId, anonymousName);
+                },
+              ),
+            ],
           ),
-          
-          if (isMe) const SizedBox(width: 6),
-        ],
+        ),
       ),
     );
+  }
+
+  /// 채팅 신청 보내기
+  Future<void> _sendChatRequest(String targetUserId, String anonymousName) async {
+    if (_currentUser == null) return;
+    
+    try {
+      // ChatService의 sendChatRequest 사용
+      final chatService = ChatService();
+      final result = await chatService.sendChatRequest(
+        fromUserId: _uid,
+        toUserId: targetUserId,
+        fromUser: _currentUser!,
+        message: '단톡에서 만나서 반가워요!',
+      );
+      
+      if (mounted) {
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$anonymousName님에게 채팅 신청을 보냈어요'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        } else if (result['error'] == 'already_pending') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('이미 채팅 신청을 보낸 상대입니다'),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+        } else if (result['error'] == 'insufficient_points') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('포인트가 부족합니다'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('채팅 신청 실패: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildAvatar(String? profileUrl, String gender) {

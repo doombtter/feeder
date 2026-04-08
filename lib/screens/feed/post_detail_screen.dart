@@ -98,7 +98,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
-  Future<void> _showChatRequestDialog(String toUserId) async {
+  Future<void> _showChatRequestDialog(String toUserId, {String? toUserGender}) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || uid == toUserId) return;
 
@@ -109,6 +109,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         builder: (context) => ChatRequestDialog(
           toUserId: toUserId,
           toUserNickname: '익명',
+          toUserGender: toUserGender,
           fromUser: myUser,
         ),
       );
@@ -346,7 +347,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             const SizedBox(width: 16),
                             if (!isAuthor)
                               GestureDetector(
-                                onTap: () => _showChatRequestDialog(widget.post.authorId),
+                                onTap: () => _showChatRequestDialog(
+                                  widget.post.authorId,
+                                  toUserGender: widget.post.authorGender,
+                                ),
                                 child: Row(
                                   children: [
                                     Icon(
@@ -440,7 +444,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 parentId: comment.parentId,
                               );
                             },
-                            onChatRequest: () => _showChatRequestDialog(comment.authorId),
+                            onChatRequest: () => _showChatRequestDialog(
+                              comment.authorId,
+                              toUserGender: comment.authorGender,
+                            ),
                             onReport: () {
                               showReportDialog(
                                 context,

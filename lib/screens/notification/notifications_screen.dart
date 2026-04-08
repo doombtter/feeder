@@ -140,6 +140,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _handleNotificationTap(NotificationModel notification) async {
+    // 그룹 내 모든 알림 읽음 처리
     if (!notification.isRead) {
       await _notificationService.markAsRead(notification.id);
     }
@@ -148,24 +149,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     switch (notification.type) {
       case NotificationType.chatRequest:
-        Navigator.push(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
             builder: (context) => const ReceivedRequestsScreen(),
           ),
+          (route) => route.isFirst,
         );
         break;
 
       case NotificationType.chatAccepted:
       case NotificationType.newMessage:
         if (notification.targetId != null) {
-          Navigator.push(
+          Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
               builder: (context) => ChatRoomScreen(
                 chatRoomId: notification.targetId!,
               ),
             ),
+            (route) => route.isFirst,
           );
         }
         break;
@@ -175,11 +178,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         if (notification.targetId != null) {
           final post = await _postService.getPost(notification.targetId!);
           if (post != null && mounted) {
-            Navigator.push(
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(
                 builder: (context) => PostDetailScreen(post: post),
               ),
+              (route) => route.isFirst,
             );
           }
         }

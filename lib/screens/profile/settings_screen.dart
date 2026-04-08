@@ -259,7 +259,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: _buildInfoItem(
                   icon: Icons.info_outline_rounded,
                   title: '앱 버전',
-                  value: '1.0.0',
+                  value: '1.0.1',
                 ),
               ),
             ],

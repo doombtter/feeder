@@ -128,18 +128,22 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
 
     switch (type) {
       case 'chatRequest':
-        navigator.push(
+        // 채팅 신청 목록으로 이동 (스택 쌓지 않고 교체)
+        navigator.pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const ReceivedRequestsScreen()),
+          (route) => route.isFirst,
         );
         break;
 
       case 'chatAccepted':
       case 'newMessage':
         if (targetId != null) {
-          navigator.push(
+          // 채팅방으로 이동 (기존 채팅방 스택 제거 후 이동)
+          navigator.pushAndRemoveUntil(
             MaterialPageRoute(
               builder: (_) => ChatRoomScreen(chatRoomId: targetId),
             ),
+            (route) => route.isFirst,
           );
         }
         break;
@@ -149,8 +153,9 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
         if (targetId != null) {
           final post = await PostService().getPost(targetId);
           if (post != null) {
-            navigator.push(
+            navigator.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+              (route) => route.isFirst,
             );
           }
         }
