@@ -13,6 +13,7 @@ import '../../models/message_model.dart';
 import '../../models/report_model.dart';
 import '../../models/video_quota_model.dart';
 import '../../services/chat_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/report_service.dart';
 import '../../services/s3_service.dart';
 import '../../services/video_service.dart';
@@ -32,6 +33,7 @@ class ChatRoomScreen extends StatefulWidget {
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _chatService = ChatService();
+  final _notificationService = NotificationService();
   final _reportService = ReportService();
   final _videoService = VideoService();
   final _userService = UserService();
@@ -45,6 +47,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   DateTime? _oldestMessageTime;
   DateTime? _newestMessageTime;
   StreamSubscription<List<MessageModel>>? _newMessagesSubscription;
+  StreamSubscription<QuerySnapshot>? _readStatusSubscription;
   
   String? _otherUserId;
   bool _isOtherPremium = false;
@@ -59,18 +62,23 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   void initState() {
     super.initState();
     _chatService.markAsRead(widget.chatRoomId, _uid);
+    // 채팅방 관련 앱 내 알림도 읽음 처리
+    _notificationService.markChatRoomNotificationsAsRead(_uid, widget.chatRoomId);
     _loadMembershipInfo();
     _loadInitialMessages();
     _scrollController.addListener(_onScroll);
+    _startListeningReadStatus();
   }
 
   Future<void> _loadInitialMessages() async {
-    final messages = await _chatService.getInitialMessages(widget.chatRoomId);
+    final result = await _chatService.getInitialMessages(widget.chatRoomId);
+    final messages = result['messages'] as List<MessageModel>;
+    final fetchedCount = result['fetchedCount'] as int;
     
     if (mounted) {
       setState(() {
         _messages = messages;
-        _hasMoreMessages = messages.length >= ChatService.messagesPerPage;
+        _hasMoreMessages = fetchedCount >= ChatService.messagesPerPage;
         if (messages.isNotEmpty) {
           _oldestMessageTime = messages.first.createdAt;
           _newestMessageTime = messages.last.createdAt;
@@ -116,6 +124,33 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     });
   }
 
+  /// 내가 보낸 메시지의 읽음 상태 실시간 리스닝
+  void _startListeningReadStatus() {
+    _readStatusSubscription?.cancel();
+    _readStatusSubscription = FirebaseFirestore.instance
+        .collection('chatRooms')
+        .doc(widget.chatRoomId)
+        .collection('messages')
+        .where('senderId', isEqualTo: _uid)
+        .where('isRead', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted && snapshot.docs.isNotEmpty) {
+        final readMessageIds = snapshot.docs.map((doc) => doc.id).toSet();
+        
+        setState(() {
+          for (int i = 0; i < _messages.length; i++) {
+            if (_messages[i].senderId == _uid && 
+                !_messages[i].isRead && 
+                readMessageIds.contains(_messages[i].id)) {
+              _messages[i] = _messages[i].copyWith(isRead: true);
+            }
+          }
+        });
+      }
+    });
+  }
+
   void _onScroll() {
     // 맨 아래 감지 (reverse: true이므로 pixels가 0에 가까울수록 맨 아래)
     final isAtBottom = _scrollController.position.pixels < 50;
@@ -153,23 +188,27 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
     setState(() => _isLoadingMore = true);
 
-    final olderMessages = await _chatService.getMoreMessages(
+    final result = await _chatService.getMoreMessages(
       widget.chatRoomId,
       beforeTime: _oldestMessageTime!,
     );
+    final olderMessages = result['messages'] as List<MessageModel>;
+    final fetchedCount = result['fetchedCount'] as int;
 
     if (mounted) {
       setState(() {
         _isLoadingMore = false;
-        if (olderMessages.isEmpty) {
+        if (fetchedCount == 0) {
           _hasMoreMessages = false;
         } else {
           // 중복 제거 후 앞에 추가
           final existingIds = _messages.map((m) => m.id).toSet();
           final newMessages = olderMessages.where((m) => !existingIds.contains(m.id)).toList();
           _messages.insertAll(0, newMessages);
-          _oldestMessageTime = _messages.first.createdAt;
-          _hasMoreMessages = olderMessages.length >= ChatService.messagesPerPage;
+          if (_messages.isNotEmpty) {
+            _oldestMessageTime = _messages.first.createdAt;
+          }
+          _hasMoreMessages = fetchedCount >= ChatService.messagesPerPage;
         }
       });
     }
@@ -208,6 +247,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _newMessagesSubscription?.cancel();
+    _readStatusSubscription?.cancel();
     super.dispose();
   }
 
@@ -378,6 +418,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   }
                 });
               },
+              onEphemeralOpened: () {
+                // 시크릿 메시지 열람 즉시 UI에서 반영
+                setState(() {
+                  final index = _messages.indexWhere((m) => m.id == message.id);
+                  if (index != -1) {
+                    _messages[index] = message.copyWith(isEphemeralOpened: true);
+                  }
+                });
+              },
             ),
           ],
         );
@@ -425,9 +474,43 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               _buildProfileImage(otherProfile.profileImageUrl, 18),
               const SizedBox(width: 8),
             ],
-            Text(otherProfile?.nickname ?? '채팅'),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 20, color: AppColors.textTertiary),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(otherProfile?.nickname ?? '채팅'),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right, size: 20, color: AppColors.textTertiary),
+                    ],
+                  ),
+                  // 타이핑 상태 표시
+                  StreamBuilder<bool>(
+                    stream: _chatService.getTypingStatus(widget.chatRoomId, _uid),
+                    builder: (context, snapshot) {
+                      final isTyping = snapshot.data ?? false;
+                      if (!isTyping) return const SizedBox.shrink();
+                      
+                      return Row(
+                        children: [
+                          _buildTypingIndicator(),
+                          const SizedBox(width: 4),
+                          const Text(
+                            '입력 중...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textTertiary,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -530,6 +613,35 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             backgroundColor: AppColors.cardLight,
             child: Icon(Icons.person, size: radius, color: AppColors.textTertiary),
           );
+  }
+
+  /// 타이핑 인디케이터 (점 3개 애니메이션)
+  Widget _buildTypingIndicator() {
+    return SizedBox(
+      width: 24,
+      height: 12,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: List.generate(3, (index) {
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.3, end: 1.0),
+            duration: Duration(milliseconds: 400 + (index * 150)),
+            curve: Curves.easeInOut,
+            builder: (context, value, child) {
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 5,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: value),
+                  shape: BoxShape.circle,
+                ),
+              );
+            },
+          );
+        }),
+      ),
+    );
   }
 
   // ── 동영상 전송 로직

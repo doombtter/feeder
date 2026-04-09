@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_constants.dart';
@@ -51,6 +52,11 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
   bool _showMediaMenu = false;
   late AnimationController _menuAnimationController;
   late Animation<double> _menuAnimation;
+  
+  // 타이핑 상태 관련
+  Timer? _typingDebounceTimer;
+  Timer? _typingResetTimer;
+  bool _isTyping = false;
 
   @override
   void initState() {
@@ -63,14 +69,56 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
       parent: _menuAnimationController,
       curve: Curves.easeOut,
     );
+    
+    // 텍스트 변경 감지
+    _messageController.addListener(_onTextChanged);
   }
 
   @override
   void dispose() {
+    _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
     _voiceController.dispose();
     _menuAnimationController.dispose();
+    _typingDebounceTimer?.cancel();
+    _typingResetTimer?.cancel();
+    // 화면 나갈 때 타이핑 상태 해제
+    _setTypingStatus(false);
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    final hasText = _messageController.text.trim().isNotEmpty;
+    
+    if (hasText) {
+      // 디바운스: 0.5초 내 연속 입력은 한 번만 업데이트
+      _typingDebounceTimer?.cancel();
+      _typingDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+        _setTypingStatus(true);
+      });
+      
+      // 3초 후 자동 타이핑 해제
+      _typingResetTimer?.cancel();
+      _typingResetTimer = Timer(const Duration(seconds: 3), () {
+        _setTypingStatus(false);
+      });
+    } else {
+      // 텍스트 없으면 즉시 해제
+      _typingDebounceTimer?.cancel();
+      _typingResetTimer?.cancel();
+      _setTypingStatus(false);
+    }
+  }
+
+  Future<void> _setTypingStatus(bool typing) async {
+    if (_isTyping == typing) return;
+    _isTyping = typing;
+    
+    try {
+      await _chatService.setTypingStatus(widget.chatRoomId, widget.uid, typing);
+    } catch (e) {
+      // 타이핑 상태 업데이트 실패는 무시
+    }
   }
 
   void _toggleMediaMenu() {
@@ -97,6 +145,11 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
 
     setState(() => _isSending = true);
     _messageController.clear();
+    
+    // 타이핑 상태 즉시 해제
+    _typingDebounceTimer?.cancel();
+    _typingResetTimer?.cancel();
+    _setTypingStatus(false);
 
     try {
       final success = await _chatService.sendMessage(

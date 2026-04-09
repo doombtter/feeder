@@ -101,6 +101,41 @@ class NotificationService {
     await batch.commit();
   }
 
+  /// 특정 채팅방 관련 알림 모두 읽음 처리
+  Future<void> markChatRoomNotificationsAsRead(String userId, String chatRoomId) async {
+    final unread = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('targetId', isEqualTo: chatRoomId)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    if (unread.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final doc in unread.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
+  /// 특정 채팅방 관련 알림 모두 삭제
+  Future<void> deleteChatRoomNotifications(String userId, String chatRoomId) async {
+    final notifications = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('targetId', isEqualTo: chatRoomId)
+        .get();
+
+    if (notifications.docs.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final doc in notifications.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   /// 알림 삭제
   Future<void> deleteNotification(String notificationId) async {
     await _firestore.collection('notifications').doc(notificationId).delete();

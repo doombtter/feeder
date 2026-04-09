@@ -69,16 +69,18 @@ class ChatService {
     required UserModel fromUser,
     String? message,
   }) async {
-    // 이미 보낸 신청이 있는지 확인
-    final existingRequest = await _firestore
-        .collection('chatRequests')
-        .where('fromUserId', isEqualTo: fromUserId)
-        .where('toUserId', isEqualTo: toUserId)
-        .where('status', isEqualTo: 'pending')
+    // 이미 채팅방이 있는지 확인 (채팅 중인 상대에게는 신청 불가)
+    final existingRoom = await _firestore
+        .collection('chatRooms')
+        .where('participants', arrayContains: fromUserId)
+        .where('isActive', isEqualTo: true)
         .get();
-
-    if (existingRequest.docs.isNotEmpty) {
-      return {'success': false, 'error': 'already_pending'};
+    
+    for (final doc in existingRoom.docs) {
+      final participants = List<String>.from(doc.data()['participants'] ?? []);
+      if (participants.contains(toUserId)) {
+        return {'success': false, 'error': 'already_chatting', 'chatRoomId': doc.id};
+      }
     }
 
     // 무료 채팅 확인
@@ -289,7 +291,8 @@ class ChatService {
   }
 
   // 페이지네이션: 초기 메시지 로드 (최신 N개)
-  Future<List<MessageModel>> getInitialMessages(String chatRoomId, {int limit = messagesPerPage}) async {
+  // 반환: {'messages': List<MessageModel>, 'fetchedCount': int}
+  Future<Map<String, dynamic>> getInitialMessages(String chatRoomId, {int limit = messagesPerPage}) async {
     final snapshot = await _firestore
         .collection('chatRooms')
         .doc(chatRoomId)
@@ -298,16 +301,22 @@ class ChatService {
         .limit(limit)
         .get();
 
-    return snapshot.docs
+    final messages = snapshot.docs
         .map((doc) => MessageModel.fromFirestore(doc))
         .where((msg) => !msg.isDeleted)
         .toList()
         .reversed
         .toList(); // 시간순 정렬
+    
+    return {
+      'messages': messages,
+      'fetchedCount': snapshot.docs.length, // Firestore에서 실제로 가져온 문서 수
+    };
   }
 
   // 페이지네이션: 이전 메시지 로드 (커서 기반)
-  Future<List<MessageModel>> getMoreMessages(
+  // 반환: {'messages': List<MessageModel>, 'fetchedCount': int}
+  Future<Map<String, dynamic>> getMoreMessages(
     String chatRoomId, {
     required DateTime beforeTime,
     int limit = messagesPerPage,
@@ -321,12 +330,17 @@ class ChatService {
         .limit(limit)
         .get();
 
-    return snapshot.docs
+    final messages = snapshot.docs
         .map((doc) => MessageModel.fromFirestore(doc))
         .where((msg) => !msg.isDeleted)
         .toList()
         .reversed
         .toList(); // 시간순 정렬
+    
+    return {
+      'messages': messages,
+      'fetchedCount': snapshot.docs.length, // Firestore에서 실제로 가져온 문서 수
+    };
   }
 
   // 새 메시지 실시간 리스닝 (특정 시점 이후)
@@ -527,6 +541,42 @@ class ChatService {
       }
       
       return totalUnread;
+    });
+  }
+
+  // ========== 타이핑 상태 ==========
+
+  /// 타이핑 상태 업데이트
+  Future<void> setTypingStatus(String chatRoomId, String userId, bool isTyping) async {
+    await _firestore.collection('chatRooms').doc(chatRoomId).update({
+      'typingUsers.$userId': isTyping ? FieldValue.serverTimestamp() : FieldValue.delete(),
+    });
+  }
+
+  /// 타이핑 상태 스트림 (상대방이 타이핑 중인지)
+  Stream<bool> getTypingStatus(String chatRoomId, String myUserId) {
+    return _firestore
+        .collection('chatRooms')
+        .doc(chatRoomId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return false;
+      
+      final data = snapshot.data();
+      final typingUsers = data?['typingUsers'] as Map<String, dynamic>? ?? {};
+      
+      // 상대방의 타이핑 상태 확인
+      for (final entry in typingUsers.entries) {
+        if (entry.key != myUserId && entry.value != null) {
+          // 3초 이내에 타이핑한 경우만 true
+          final timestamp = entry.value as Timestamp?;
+          if (timestamp != null) {
+            final elapsed = DateTime.now().difference(timestamp.toDate()).inSeconds;
+            if (elapsed < 3) return true;
+          }
+        }
+      }
+      return false;
     });
   }
 }

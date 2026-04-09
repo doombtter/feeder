@@ -27,11 +27,15 @@ class ShotsScreenState extends State<ShotsScreen>
   MembershipTier _membershipTier = MembershipTier.free;
   bool get _isPremium => _membershipTier != MembershipTier.free;
 
-  // 둘러보기 탭
-  final _pageController = PageController();
-  List<ShotModel> _shots = [];
-  bool _isLoading = true;
-  bool _isReplayMode = false;
+  // Shots 탭 (새로운)
+  final _newPageController = PageController();
+  List<ShotModel> _newShots = [];
+  bool _isNewLoading = true;
+
+  // 다시보기 탭
+  final _replayPageController = PageController();
+  List<ShotModel> _replayShots = [];
+  bool _isReplayLoading = true;
 
   // 내 Shot 탭
   List<ShotModel> _myShots = [];
@@ -40,15 +44,22 @@ class ShotsScreenState extends State<ShotsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() {
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
+    _loadNewShots();
+    _loadMembershipTier();
+  }
+
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging) {
       setState(() {});
-      if (_tabController.index == 1 && _isMyLoading) {
+      // 탭 전환 시 해당 탭 데이터 로드
+      if (_tabController.index == 1 && _isReplayLoading) {
+        _loadReplayShots();
+      } else if (_tabController.index == 2 && _isMyLoading) {
         _loadMyShots();
       }
-    });
-    _loadShots();
-    _loadMembershipTier();
+    }
   }
 
   Future<void> _loadMembershipTier() async {
@@ -64,27 +75,44 @@ class ShotsScreenState extends State<ShotsScreen>
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
-    _pageController.dispose();
+    _newPageController.dispose();
+    _replayPageController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadShots() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadNewShots() async {
+    setState(() => _isNewLoading = true);
     try {
       final shots = await _shotService.getUnviewedShots(_uid);
       if (mounted) {
         setState(() {
-          _shots = shots;
-          _isLoading = false;
+          _newShots = shots;
+          _isNewLoading = false;
         });
         // 첫 번째 Shot 조회 기록
-        if (shots.isNotEmpty && !_isReplayMode) {
+        if (shots.isNotEmpty) {
           _shotService.markAsViewed(shots.first.id, _uid);
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isNewLoading = false);
+    }
+  }
+
+  Future<void> _loadReplayShots() async {
+    setState(() => _isReplayLoading = true);
+    try {
+      final shots = await _shotService.getViewedShots(_uid);
+      if (mounted) {
+        setState(() {
+          _replayShots = shots;
+          _isReplayLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isReplayLoading = false);
     }
   }
 
@@ -105,37 +133,14 @@ class ShotsScreenState extends State<ShotsScreen>
   }
 
   Future<void> refresh() async {
-    _isReplayMode = false;
-    await _loadShots();
-    if (_tabController.index == 1) await _loadMyShots();
-  }
-
-  void _toggleReplayMode() {
-    final newMode = !_isReplayMode;
-    setState(() {
-      _isReplayMode = newMode;
-      _shots = [];
-    });
-    if (newMode) {
-      _loadAllShots();
-    } else {
-      _loadShots();
+    await _loadNewShots();
+    if (_tabController.index == 1) {
+      _isReplayLoading = true;
+      await _loadReplayShots();
     }
-  }
-
-  Future<void> _loadAllShots() async {
-    setState(() => _isLoading = true);
-    try {
-      final stream = _shotService.getShotsStream(excludeUserId: _uid);
-      final shots = await stream.first;
-      if (mounted) {
-        setState(() {
-          _shots = shots;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+    if (_tabController.index == 2) {
+      _isMyLoading = true;
+      await _loadMyShots();
     }
   }
 
@@ -153,58 +158,8 @@ class ShotsScreenState extends State<ShotsScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: Theme(
-                    data: Theme.of(context).copyWith(
-                      tabBarTheme: TabBarThemeData(
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              blurRadius: 8,
-                            ),
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              blurRadius: 16,
-                            ),
-                          ],
-                        ),
-                        unselectedLabelStyle: TextStyle(
-                          fontWeight: FontWeight.normal,
-                          fontSize: 15,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              blurRadius: 8,
-                            ),
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              blurRadius: 16,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      indicatorColor: Colors.white,
-                      indicatorWeight: 2,
-                      labelColor: Colors.white,
-                      unselectedLabelColor: Colors.white54,
-                      tabs: const [
-                        Tab(text: 'Shots'),
-                        Tab(text: '내 Shot'),
-                      ],
-                    ),
-                  ),
+                  child: _buildSegmentedTabs(),
                 ),
-                if (_tabController.index == 0) ...[
-                  _buildShadowedIconButton(
-                    icon: _isReplayMode ? Icons.fiber_new : Icons.replay,
-                    onPressed: _toggleReplayMode,
-                  ),
-                ],
                 _buildShadowedIconButton(
                   icon: Icons.add_circle_outline,
                   onPressed: _createShot,
@@ -218,9 +173,78 @@ class ShotsScreenState extends State<ShotsScreen>
         controller: _tabController,
         physics: const NeverScrollableScrollPhysics(),
         children: [
-          _buildShotsTab(),
+          _buildNewShotsTab(),
+          _buildReplayShotsTab(),
           _buildMyShotsTab(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentedTabs() {
+    return Container(
+      height: 36,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          _buildSegmentTab(0, 'Shots', _newShots.isNotEmpty ? _newShots.length : null),
+          _buildSegmentTab(1, '다시보기', null),
+          _buildSegmentTab(2, '내 Shot', null),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentTab(int index, String label, int? badge) {
+    final isSelected = _tabController.index == index;
+    
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _tabController.animateTo(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.black : Colors.white70,
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+                if (badge != null && badge > 0) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF6C63FF) : Colors.white24,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      badge > 99 ? '99+' : '$badge',
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -248,27 +272,33 @@ class ShotsScreenState extends State<ShotsScreen>
     );
   }
 
-  Widget _buildShotsTab() {
-    if (_isLoading) {
+  Widget _buildNewShotsTab() {
+    if (_isNewLoading) {
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
-    if (_shots.isEmpty) return _buildEmptyState();
+    if (_newShots.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.fiber_new_rounded,
+        title: '새로운 Shots가 없어요',
+        subtitle: '나중에 다시 확인해보세요!',
+      );
+    }
 
     final itemsWithAds = <dynamic>[];
-    for (int i = 0; i < _shots.length; i++) {
-      itemsWithAds.add(_shots[i]);
-      if (!_isPremium && (i + 1) % 5 == 0 && i + 1 < _shots.length) {
+    for (int i = 0; i < _newShots.length; i++) {
+      itemsWithAds.add(_newShots[i]);
+      if (!_isPremium && (i + 1) % 5 == 0 && i + 1 < _newShots.length) {
         itemsWithAds.add('ad');
       }
     }
 
     return PageView.builder(
-      controller: _pageController,
+      controller: _newPageController,
       scrollDirection: Axis.vertical,
       itemCount: itemsWithAds.length,
       onPageChanged: (index) {
         final item = itemsWithAds[index];
-        if (item is ShotModel && !_isReplayMode) {
+        if (item is ShotModel) {
           _shotService.markAsViewed(item.id, _uid);
         }
       },
@@ -280,15 +310,66 @@ class ShotsScreenState extends State<ShotsScreen>
         }
 
         final shot = item as ShotModel;
-        final shotIndex = _shots.indexOf(shot);
+        final shotIndex = _newShots.indexOf(shot);
 
         return ShotItem(
           shot: shot,
           isOwner: false,
           onDelete: () {
-            setState(() => _shots.removeAt(shotIndex));
-            if (shotIndex < _shots.length) {
-              _pageController.nextPage(
+            setState(() => _newShots.removeAt(shotIndex));
+            if (shotIndex < _newShots.length) {
+              _newPageController.nextPage(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReplayShotsTab() {
+    if (_isReplayLoading) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    if (_replayShots.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.replay_rounded,
+        title: '다시 볼 Shots가 없어요',
+        subtitle: 'Shots를 둘러보고 나면 여기서 다시 볼 수 있어요',
+      );
+    }
+
+    final itemsWithAds = <dynamic>[];
+    for (int i = 0; i < _replayShots.length; i++) {
+      itemsWithAds.add(_replayShots[i]);
+      if (!_isPremium && (i + 1) % 5 == 0 && i + 1 < _replayShots.length) {
+        itemsWithAds.add('ad');
+      }
+    }
+
+    return PageView.builder(
+      controller: _replayPageController,
+      scrollDirection: Axis.vertical,
+      itemCount: itemsWithAds.length,
+      itemBuilder: (context, index) {
+        final item = itemsWithAds[index];
+
+        if (item == 'ad') {
+          return const ShotNativeAdWidget();
+        }
+
+        final shot = item as ShotModel;
+        final shotIndex = _replayShots.indexOf(shot);
+
+        return ShotItem(
+          shot: shot,
+          isOwner: false,
+          onDelete: () {
+            setState(() => _replayShots.removeAt(shotIndex));
+            if (shotIndex < _replayShots.length) {
+              _replayPageController.nextPage(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOut,
               );
@@ -304,25 +385,11 @@ class ShotsScreenState extends State<ShotsScreen>
       return const Center(child: CircularProgressIndicator(color: Colors.white));
     }
     if (_myShots.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.photo_camera_outlined, size: 64, color: Colors.grey[700]),
-            const SizedBox(height: 16),
-            const Text('올린 Shot이 없어요', style: TextStyle(color: Colors.grey, fontSize: 16)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _createShot,
-              icon: const Icon(Icons.add),
-              label: const Text('Shot 올리기'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6C63FF),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
+      return _buildEmptyState(
+        icon: Icons.photo_camera_outlined,
+        title: '올린 Shot이 없어요',
+        subtitle: '첫 번째 Shot을 올려보세요!',
+        showCreateButton: true,
       );
     }
 
@@ -359,29 +426,33 @@ class ShotsScreenState extends State<ShotsScreen>
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    bool showCreateButton = false,
+  }) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.photo_camera_outlined, size: 64, color: Colors.grey),
+          Icon(icon, size: 64, color: Colors.grey[700]),
           const SizedBox(height: 16),
-          Text(
-            _isReplayMode ? '다시볼 Shots가 없어요' : '새로운 Shots가 없어요',
-            style: const TextStyle(fontSize: 18, color: Colors.grey),
-          ),
+          Text(title, style: const TextStyle(fontSize: 18, color: Colors.grey)),
           const SizedBox(height: 8),
-          const Text('첫 번째 Shot을 올려보세요!', style: TextStyle(fontSize: 14, color: Colors.grey)),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _createShot,
-            icon: const Icon(Icons.add),
-            label: const Text('Shot 올리기'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6C63FF),
-              foregroundColor: Colors.white,
+          Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+          if (showCreateButton) ...[
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _createShot,
+              icon: const Icon(Icons.add),
+              label: const Text('Shot 올리기'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6C63FF),
+                foregroundColor: Colors.white,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -393,8 +464,11 @@ class ShotsScreenState extends State<ShotsScreen>
       MaterialPageRoute(builder: (context) => const ShotCreateScreen()),
     );
     if (result == true) {
-      _loadShots();
-      _loadMyShots();
+      _loadNewShots();
+      _isReplayLoading = true;
+      _isMyLoading = true;
+      if (_tabController.index == 1) _loadReplayShots();
+      if (_tabController.index == 2) _loadMyShots();
     }
   }
 }

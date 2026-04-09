@@ -14,6 +14,7 @@ class MessageBubble extends StatefulWidget {
   final bool showTime;
   final String chatRoomId;
   final VoidCallback? onDeleted;
+  final VoidCallback? onEphemeralOpened;
 
   const MessageBubble({
     super.key,
@@ -22,6 +23,7 @@ class MessageBubble extends StatefulWidget {
     this.showTime = true,
     required this.chatRoomId,
     this.onDeleted,
+    this.onEphemeralOpened,
   });
 
   @override
@@ -43,11 +45,27 @@ class _MessageBubbleState extends State<MessageBubble> {
   void initState() {
     super.initState();
     if (widget.message.type == MessageType.voice) _initPlayer();
-    
-    // 펑 메시지 상태 초기화 - 이미 열람되었다면 즉시 만료
+    _syncEphemeralState();
+  }
+
+  @override
+  void didUpdateWidget(covariant MessageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 메시지가 변경되면 시크릿 상태 동기화
+    if (oldWidget.message.id != widget.message.id ||
+        oldWidget.message.isEphemeralOpened != widget.message.isEphemeralOpened) {
+      _syncEphemeralState();
+    }
+  }
+
+  /// 시크릿 메시지 상태 동기화
+  void _syncEphemeralState() {
     _ephemeralOpened = widget.message.isEphemeralOpened;
     if (widget.message.isEphemeral && _ephemeralOpened) {
       _ephemeralExpired = true; // 이미 열람된 시크릿 메시지는 즉시 만료
+    } else if (!widget.message.isEphemeral) {
+      _ephemeralExpired = false;
+      _ephemeralOpened = false;
     }
   }
 
@@ -130,6 +148,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (_ephemeralOpened || _ephemeralExpired) return;
     
     await _chatService.openEphemeralMessage(widget.chatRoomId, widget.message.id);
+    
+    // 부모에게 시크릿 열람 알림 (즉시 상태 업데이트를 위해)
+    widget.onEphemeralOpened?.call();
     
     // 시크릿 미디어 열람 - 전체화면으로 바로 보여주고 닫으면 만료
     final isVideo = widget.message.type == MessageType.video;
@@ -259,6 +280,17 @@ class _MessageBubbleState extends State<MessageBubble> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (widget.isMe && widget.showTime) ...[
+              // 읽음 표시 (안읽으면 점 표시)
+              if (!widget.message.isRead)
+                Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
               Text(
                 widget.message.timeText,
                 style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),

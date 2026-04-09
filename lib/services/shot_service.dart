@@ -42,6 +42,52 @@ class ShotService {
     }).toList();
   }
 
+  // 이미 본 Shots 목록 (다시보기용)
+  Future<List<ShotModel>> getViewedShots(String userId) async {
+    final now = DateTime.now();
+
+    // 내가 조회한 shot ID 목록
+    final viewedSnapshot = await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('viewedShots')
+        .orderBy('viewedAt', descending: true)
+        .get();
+    final viewedIds = viewedSnapshot.docs.map((d) => d.id).toList();
+
+    if (viewedIds.isEmpty) return [];
+
+    // 조회한 Shots 중 아직 활성인 것들만
+    final List<ShotModel> viewedShots = [];
+    
+    // Firestore whereIn은 최대 10개까지만 지원하므로 배치로 처리
+    for (int i = 0; i < viewedIds.length; i += 10) {
+      final batchIds = viewedIds.skip(i).take(10).toList();
+      final shotsSnapshot = await _firestore
+          .collection('shots')
+          .where(FieldPath.documentId, whereIn: batchIds)
+          .where('isDeleted', isEqualTo: false)
+          .get();
+      
+      for (final doc in shotsSnapshot.docs) {
+        final shot = ShotModel.fromFirestore(doc);
+        // 만료되지 않았고, 내 shot이 아닌 것만
+        if (!shot.isExpired && shot.authorId != userId) {
+          viewedShots.add(shot);
+        }
+      }
+    }
+
+    // viewedAt 순서대로 정렬 (최근에 본 것이 먼저)
+    viewedShots.sort((a, b) {
+      final aIndex = viewedIds.indexOf(a.id);
+      final bIndex = viewedIds.indexOf(b.id);
+      return aIndex.compareTo(bIndex);
+    });
+
+    return viewedShots;
+  }
+
   // 활성 Shots 스트림 (조회 여부 관계없이, 내 shots 제외)
   Stream<List<ShotModel>> getShotsStream({String? excludeUserId}) {
     final now = DateTime.now();

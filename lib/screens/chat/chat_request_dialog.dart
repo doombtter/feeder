@@ -81,10 +81,10 @@ class _ChatRequestDialogState extends State<ChatRequestDialog> {
           );
         } else {
           String errorMessage = '채팅 신청에 실패했습니다';
-          if (error == 'already_pending') {
-            errorMessage = '이미 신청 중입니다';
-          } else if (error == 'insufficient_points') {
+          if (error == 'insufficient_points') {
             errorMessage = '포인트가 부족합니다';
+          } else if (error == 'already_chatting') {
+            errorMessage = '이미 대화 중인 상대입니다';
           }
           
           ScaffoldMessenger.of(context).showSnackBar(

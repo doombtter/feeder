@@ -126,9 +126,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               return _NotificationGroupItem(
                 group: group,
                 onTap: () => _handleNotificationTap(group.latestNotification),
-                onDelete: () {
-                  for (final n in group.notifications) {
-                    _notificationService.deleteNotification(n.id);
+                onDelete: () async {
+                  final notification = group.latestNotification;
+                  
+                  // 메시지 알림은 같은 채팅방의 모든 알림 삭제
+                  if (notification.type == NotificationType.newMessage && 
+                      notification.targetId != null) {
+                    await _notificationService.deleteChatRoomNotifications(
+                      _uid, 
+                      notification.targetId!,
+                    );
+                  } else {
+                    // 다른 알림은 개별 삭제
+                    for (final n in group.notifications) {
+                      await _notificationService.deleteNotification(n.id);
+                    }
                   }
                 },
               );
@@ -140,9 +152,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _handleNotificationTap(NotificationModel notification) async {
-    // 그룹 내 모든 알림 읽음 처리
-    if (!notification.isRead) {
-      await _notificationService.markAsRead(notification.id);
+    // 해당 알림과 관련된 모든 알림 읽음 처리
+    final allNotifications = await _notificationService.getNotificationsStream(_uid).first;
+    
+    // 같은 타입 + 같은 targetId의 알림들 모두 읽음 처리
+    for (final n in allNotifications) {
+      if (!n.isRead) {
+        // 메시지 알림: 같은 채팅방(targetId)의 알림 모두 읽음
+        if (notification.type == NotificationType.newMessage && 
+            n.type == NotificationType.newMessage &&
+            n.targetId == notification.targetId) {
+          await _notificationService.markAsRead(n.id);
+        }
+        // 같은 알림이면 읽음 처리
+        else if (n.id == notification.id) {
+          await _notificationService.markAsRead(n.id);
+        }
+      }
     }
 
     if (!mounted) return;

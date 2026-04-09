@@ -7,6 +7,7 @@ import '../../core/constants/app_constants.dart';
 import '../../services/chat_service.dart';
 import '../../services/user_service.dart';
 import '../../models/user_model.dart';
+import 'chat_request_dialog.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final String groupChatId;
@@ -560,7 +561,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  _sendChatRequest(targetUserId, anonymousName);
+                  _showChatRequestDialog(targetUserId, anonymousName, gender);
                 },
               ),
             ],
@@ -570,54 +571,19 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     );
   }
 
-  /// 채팅 신청 보내기
-  Future<void> _sendChatRequest(String targetUserId, String anonymousName) async {
+  /// 채팅 신청 다이얼로그 띄우기
+  void _showChatRequestDialog(String targetUserId, String anonymousName, String gender) {
     if (_currentUser == null) return;
     
-    try {
-      // ChatService의 sendChatRequest 사용
-      final chatService = ChatService();
-      final result = await chatService.sendChatRequest(
-        fromUserId: _uid,
+    showDialog(
+      context: context,
+      builder: (context) => ChatRequestDialog(
         toUserId: targetUserId,
+        toUserNickname: anonymousName,
+        toUserGender: gender,
         fromUser: _currentUser!,
-        message: '단톡에서 만나서 반가워요!',
-      );
-      
-      if (mounted) {
-        if (result['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('$anonymousName님에게 채팅 신청을 보냈어요'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        } else if (result['error'] == 'already_pending') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('이미 채팅 신청을 보낸 상대입니다'),
-              backgroundColor: AppColors.warning,
-            ),
-          );
-        } else if (result['error'] == 'insufficient_points') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('포인트가 부족합니다'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('채팅 신청 실패: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
+      ),
+    );
   }
 
   Widget _buildAvatar(String? profileUrl, String gender) {
