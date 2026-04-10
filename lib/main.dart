@@ -45,7 +45,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 상태바 스타일 설정 (다크 테마용 - 흰색 아이콘)
+  // 상태바 스타일 설정
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -54,13 +54,14 @@ void main() async {
     ),
   );
 
-  // 병렬 초기화 (Firebase는 필수라 먼저)
-  await Future.wait([
-    dotenv.load(fileName: '.env'),
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
-  ]);
+  // 순서대로 초기화 (병렬 X)
+  await dotenv.load(fileName: '.env');
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // AdMob은 백그라운드에서 (화면 차단 안 함)
+  // Crashlytics 설정
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+  // AdMob은 백그라운드에서
   AdMobService.initialize();
 
   // FCM 백그라운드 핸들러 등록
@@ -79,7 +80,7 @@ class FeederApp extends StatefulWidget {
 class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
   final _userService = UserService();
   final _deviceService = DeviceService();
-  
+
   AppVersionStatus? _versionStatus;
   bool _versionChecked = false;
 
@@ -113,7 +114,7 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
   /// 알림 클릭 시 해당 화면으로 이동
   Future<void> _handleNotificationClick(RemoteMessage message) async {
     debugPrint('🔔 알림 클릭: ${message.data}');
-    
+
     // 로그인 상태 확인
     if (FirebaseAuth.instance.currentUser == null) return;
 
@@ -166,8 +167,9 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
 
   Future<void> _checkAppVersion() async {
     try {
-      final status = await _deviceService.checkAppVersion()
-          .timeout(const Duration(seconds: 3), onTimeout: () => AppVersionStatus.ok());
+      final status = await _deviceService.checkAppVersion().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => AppVersionStatus.ok());
       if (mounted) {
         setState(() {
           _versionStatus = status;
@@ -245,12 +247,12 @@ class _FeederAppState extends State<FeederApp> with WidgetsBindingObserver {
 }
 
 /// 인증 상태 확인 래퍼
-/// 
+///
 /// 새로운 인증 플로우:
 /// 1. 비로그인 → SocialLoginScreen (Google/Apple 선택)
 /// 2. 소셜 로그인 후 → PhoneVerifyScreen (매번 전화번호 인증)
 /// 3. 전화번호 인증 완료 → ProfileCheckWrapper
-/// 
+///
 /// 기존 계정이어도 매번 전화번호 인증을 거칩니다.
 class AuthWrapper extends StatefulWidget {
   final bool showUpdateDialog;
@@ -261,18 +263,18 @@ class AuthWrapper extends StatefulWidget {
     this.showUpdateDialog = false,
     this.versionStatus,
   });
-  
+
   /// 새 로그인 시작 표시 (SocialLoginScreen에서 호출)
   static void markNewLogin() {
     _AuthWrapperState._isNewLogin = true;
     _AuthWrapperState._phoneVerifiedThisSession = false;
   }
-  
+
   /// 전화번호 인증 완료 표시
   static void markPhoneVerified() {
     _AuthWrapperState._phoneVerifiedThisSession = true;
   }
-  
+
   /// 로그아웃 시 세션 플래그 초기화
   static void resetSession() {
     _AuthWrapperState._isNewLogin = false;
@@ -286,23 +288,23 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   late final Stream<User?> _authStream;
   final _deviceService = DeviceService();
-  
+
   // 새 로그인(소셜 로그인 직접 수행)인지 여부
   static bool _isNewLogin = false;
-  
+
   // 이번 새 로그인 세션에서 전화번호 인증 완료 여부
   static bool _phoneVerifiedThisSession = false;
-  
+
   // 앱 시작 시 이미 로그인되어 있었는지
   bool _wasLoggedInOnStart = false;
-  
+
   // 선택적 업데이트 다이얼로그 표시 여부
   bool _updateDialogShown = false;
 
   @override
   void initState() {
     super.initState();
-    
+
     // 앱 시작 시 이미 로그인되어 있으면 자동 로그인
     _wasLoggedInOnStart = FirebaseAuth.instance.currentUser != null;
 
@@ -363,12 +365,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
           // 전화번호 미연동 → 전화번호 연동 화면 (최초 가입)
           return PhoneLinkScreen(user: user);
         }
-        
+
         // 자동 로그인(앱 시작 시 이미 로그인됨)이면 바로 통과
         if (_wasLoggedInOnStart && !_isNewLogin) {
           return const ProfileCheckWrapper();
         }
-        
+
         // 새 로그인인데 전화번호 인증 안 했으면 인증 필요
         if (_isNewLogin && !_phoneVerifiedThisSession) {
           return PhoneVerifyScreen(
@@ -413,7 +415,7 @@ class _ProfileCheckWrapperState extends State<ProfileCheckWrapper> {
   void _initializeInBackground() {
     if (_initialized) return;
     _initialized = true;
-    
+
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
