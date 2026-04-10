@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'services/admob_service.dart';
 import 'services/device_service.dart';
 import 'services/post_service.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 // Core
 import 'core/theme/app_theme.dart';
@@ -38,7 +39,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  debugPrint('백그라운드 메시지: ${message.notification?.title}');
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 }
 
 void main() async {
@@ -323,12 +324,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         ),
       );
     });
-  }
-
-  Future<void> _recordLoginIfNeeded(String uid) async {
-    // 로그인 기록은 한 번만
-    if (!_isNewLogin && !_wasLoggedInOnStart) return;
-    await _deviceService.recordLogin(uid);
   }
 
   @override
