@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+// import 'package:cloud_functions/cloud_functions.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -108,7 +108,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
     try {
       // 🔐 Cloud Functions에서 토큰 발급받기
-      final token = await _getAgoraToken(widget.channelId);
+      final token = "await _getAgoraToken(widget.channelId)";
       if (!mounted) return;
       
       if (token == null) {
@@ -195,17 +195,17 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   }
 
   /// Cloud Functions에서 Agora 토큰 발급
-  Future<String?> _getAgoraToken(String channelId) async {
-    try {
-      final functions = FirebaseFunctions.instance;
-      final callable = functions.httpsCallable('getAgoraToken');
-      final result = await callable.call({'channelId': channelId});
-      return result.data['token'] as String?;
-    } catch (e) {
-      debugPrint('❌ 토큰 발급 실패: $e');
-      return null;
-    }
-  }
+  // Future<String?> _getAgoraToken(String channelId) async {
+  //   try {
+  //     final functions = FirebaseFunctions.instance;
+  //     final callable = functions.httpsCallable('getAgoraToken');
+  //     final result = await callable.call({'channelId': channelId});
+  //     return result.data['token'] as String?;
+  //   } catch (e) {
+  //     debugPrint('❌ 토큰 발급 실패: $e');
+  //     return null;
+  //   }
+  // }
 
   Future<void> _disposeAgora() async {
     try {
