@@ -1,7 +1,7 @@
 name: feeder
 description: "익명 소통 플랫폼"
 publish_to: 'none'
-version: 1.0.1+23
+version: 1.0.1+24
 
 environment:
   sdk: ^3.5.0
