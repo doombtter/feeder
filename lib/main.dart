@@ -45,7 +45,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 상태바 스타일 설정
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -54,17 +53,11 @@ void main() async {
     ),
   );
 
-  // 순서대로 초기화 (병렬 X)
   await dotenv.load(fileName: '.env');
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Crashlytics 설정
+  
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
-  // AdMob은 백그라운드에서
   AdMobService.initialize();
-
-  // FCM 백그라운드 핸들러 등록
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const FeederApp());
