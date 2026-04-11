@@ -51,6 +51,7 @@ void main() async {
   );
 
   await dotenv.load(fileName: '.env');
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
