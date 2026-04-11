@@ -32,7 +32,7 @@ dependencies:
   video_compress: ^3.1.2
   agora_rtc_engine: ^6.3.2
   flutter_launcher_icons: ^0.14.4
-  #cloud_functions: ^6.1.0
+  cloud_functions: ^6.1.0
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^7.0.1
   device_info_plus: ^10.1.0

@@ -36,6 +36,9 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 // 백그라운드 메시지 핸들러 (최상위 함수)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 }
 
@@ -52,7 +55,7 @@ void main() async {
 
   await dotenv.load(fileName: '.env');
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
   AdMobService.initialize();
