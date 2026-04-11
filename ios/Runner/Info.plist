@@ -37,13 +37,23 @@
 		</array>
 		<key>CFBundleURLTypes</key>
 		<array>
+			<!-- 기존 Google 로그인용 -->
 			<dict>
 				<key>CFBundleURLSchemes</key>
 				<array>
 					<string>com.googleusercontent.apps.663777820227-tdfbv9ad6rdro97riqlc7utrdh95bchp</string>
 				</array>
 			</dict>
+			<!-- Firebase Phone Auth reCAPTCHA용 추가 -->
+			<dict>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.feeder.feeder</string>
+				</array>
+			</dict>
 		</array>
+		<key>GIDClientID</key>
+		<string>663777820227-tdfbv9ad6rdro97riqlc7utrdh95bchp.apps.googleusercontent.com</string>
 
 		<!-- 권한 설명 -->
 		<key>NSCameraUsageDescription</key>
