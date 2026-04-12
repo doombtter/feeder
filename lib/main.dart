@@ -33,14 +33,13 @@ import 'models/user_model.dart';
 /// 글로벌 네비게이터 키 (알림 클릭 시 화면 이동용)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// 백그라운드 메시지 핸들러 (최상위 함수)
-// @pragma('vm:entry-point')
-// Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-//   await Firebase.initializeApp(
-//     options: DefaultFirebaseOptions.currentPlatform,
-//   );
-//   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-// }
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +58,7 @@ void main() async {
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
   AdMobService.initialize();
-  // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const FeederApp());
 }
