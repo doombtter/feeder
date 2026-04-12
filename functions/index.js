@@ -19,12 +19,14 @@ const { defineSecret } = require("firebase-functions/params");
 const AGORA_APP_ID = defineSecret("AGORA_APP_ID");
 const AGORA_APP_CERTIFICATE = defineSecret("AGORA_APP_CERTIFICATE");
 
-// 🔔 멀티토큰 푸시 알림
+// 🔔 멀티토큰 푸시 알림 (카카오톡 스타일 그룹화)
 exports.sendPushNotification = onDocumentCreated(
   "notifications/{notificationId}",
   async (event) => {
     const notification = event.data.data();
     const userId = notification.userId;
+    const type = notification.type || "";
+    const targetId = notification.targetId || "";
 
     try {
       const userDoc = await db.collection("users").doc(userId).get();
@@ -41,29 +43,93 @@ exports.sendPushNotification = onDocumentCreated(
         return null;
       }
 
+      // 🔥 알림 타입별 그룹화 설정
+      const isChat = type === "newMessage" || type === "chatAccepted";
+      const isChatRequest = type === "chatRequest";
+      const isComment = type === "newComment" || type === "newReply";
+
+      // 그룹 키 생성 (같은 키면 알림이 묶임)
+      let androidTag;
+      let collapseKey;
+      let threadId; // iOS용
+
+      if (isChat && targetId) {
+        // 채팅: 같은 채팅방끼리 묶음
+        androidTag = `chat_${targetId}`;
+        collapseKey = `chat_${targetId}`;
+        threadId = `chat_${targetId}`;
+      } else if (isChatRequest) {
+        // 채팅 신청: 모든 신청을 하나로 묶음
+        androidTag = "chat_requests";
+        collapseKey = "chat_requests";
+        threadId = "chat_requests";
+      } else if (isComment && targetId) {
+        // 댓글/답글: 같은 게시글끼리 묶음
+        androidTag = `post_${targetId}`;
+        collapseKey = `post_${targetId}`;
+        threadId = `post_${targetId}`;
+      } else {
+        // 기타: 타입별로 묶음
+        androidTag = type || "general";
+        collapseKey = type || "general";
+        threadId = type || "general";
+      }
+
       const payloadBase = {
         notification: {
           title: notification.title,
           body: notification.body,
         },
         data: {
-          type: notification.type || "",
-          targetId: notification.targetId || "",
+          type: type,
+          targetId: targetId,
           senderId: notification.senderId || "",
           click_action: "FLUTTER_NOTIFICATION_CLICK",
         },
         android: {
           priority: "high",
+          // 🔥 그룹화 핵심 설정
+          collapseKey: collapseKey, // 같은 키면 최신 알림만 표시
+          notification: {
+            tag: androidTag, // 같은 태그면 알림이 교체됨
+            channelId: isChat ? "chat_messages" : "default",
+            // 알림 클릭 시 앱 열기
+            clickAction: "FLUTTER_NOTIFICATION_CLICK",
+          },
         },
         apns: {
           payload: {
             aps: {
               sound: "default",
               badge: 1,
+              // 🔥 iOS 그룹화
+              "thread-id": threadId,
+              // 알림 요약 (iOS 15+)
+              "interruption-level": "active",
             },
           },
         },
       };
+
+      // 🔥 채팅 메시지일 때 읽지 않은 메시지 수 표시
+      if (isChat && targetId) {
+        // 해당 채팅방의 읽지 않은 알림 수 조회
+        const unreadCount = await db
+          .collection("notifications")
+          .where("userId", "==", userId)
+          .where("targetId", "==", targetId)
+          .where("isRead", "==", false)
+          .where("type", "==", "newMessage")
+          .count()
+          .get();
+
+        const count = unreadCount.data().count;
+
+        if (count > 1) {
+          // 여러 개면 "새 메시지 N개" 형태로 표시
+          payloadBase.notification.body = `새 메시지 ${count}개`;
+        }
+      }
 
       // 🔥 500개씩 분할 (FCM 제한 대응)
       const chunkSize = 500;
@@ -107,7 +173,7 @@ exports.sendPushNotification = onDocumentCreated(
       }
 
       console.log(
-        `Push sent to ${fcmTokens.length - invalidTokens.length} devices`
+        `Push sent to ${fcmTokens.length - invalidTokens.length} devices (tag: ${androidTag})`
       );
 
       return null;

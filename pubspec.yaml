@@ -1,7 +1,7 @@
 name: feeder
 description: "익명 소통 플랫폼"
 publish_to: 'none'
-version: 1.0.1+30
+version: 1.0.1+31
 
 environment:
   sdk: ^3.5.0
@@ -38,6 +38,8 @@ dependencies:
   device_info_plus: ^10.1.0
   package_info_plus: ^8.0.0
   firebase_crashlytics: ^5.1.0
+  flutter_local_notifications: ^18.0.1
+  shared_preferences: ^2.3.3
 
 dev_dependencies:
   flutter_test:

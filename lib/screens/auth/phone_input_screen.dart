@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -77,22 +79,22 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         );
       },
       onAutoVerify: (credential) async {
-        if (!mounted) return;
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() => _isLoading = false);
+        if (Platform.isAndroid) {
+          // Android: 자동 인증 처리
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          try {
+            await _authService.signInWithCredential(credential);
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('로그인 실패: $e')),
+              );
+            }
           }
-        });
-
-        try {
-          await _authService.signInWithCredential(credential);
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('로그인 실패: $e')),
-            );
-          }
+        } else {
+          // iOS: 아무것도 안 함 (Silent APNs로 이미 로그인됨)
+          debugPrint('🔐 iOS auto verification - handled by system');
         }
       },
     );
