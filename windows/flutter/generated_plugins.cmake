@@ -8,7 +8,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
   firebase_auth
   firebase_core
-  flutter_sound
   iris_method_channel
   permission_handler_windows
   url_launcher_windows
