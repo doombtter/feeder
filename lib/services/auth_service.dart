@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -17,6 +18,23 @@ class AuthService {
   // 인증 상태 스트림
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  // 에러 로그 저장
+  Future<void> _logError(String location, String message, String? stackTrace) async {
+    try {
+      await _firestore.collection('error_logs').add({
+        'location': location,
+        'message': message,
+        'stackTrace': stackTrace,
+        'platform': Platform.isIOS ? 'iOS' : 'Android',
+        'osVersion': Platform.operatingSystemVersion,
+        'userId': _auth.currentUser?.uid,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      // 로그 저장 실패는 무시
+    }
+  }
+
   // 전화번호 인증 요청
   Future<void> verifyPhoneNumber({
     required String phoneNumber,
@@ -24,43 +42,66 @@ class AuthService {
     required Function(String error) onError,
     required Function(PhoneAuthCredential credential) onAutoVerify,
   }) async {
-    await _auth.verifyPhoneNumber(
-      phoneNumber: phoneNumber,
-      timeout: const Duration(seconds: 120), // 타임아웃 2분으로 늘림
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        onAutoVerify(credential);
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        String message;
-        switch (e.code) {
-          case 'invalid-phone-number':
-            message = '올바른 전화번호 형식이 아닙니다';
-            break;
-          case 'too-many-requests':
-            message = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요';
-            break;
-          case 'quota-exceeded':
-            message = '일일 인증 한도를 초과했습니다. 내일 다시 시도해주세요';
-            break;
-          case 'app-not-authorized':
-            message = '앱 인증 설정에 문제가 있습니다';
-            break;
-          case 'captcha-check-failed':
-            message = '보안 검증에 실패했습니다. 다시 시도해주세요';
-            break;
-          case 'network-request-failed':
-            message = '네트워크 연결을 확인해주세요';
-            break;
-          default:
-            message = e.message ?? '인증에 실패했습니다';
-        }
-        onError(message);
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        onCodeSent(verificationId);
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {},
-    );
+    // 시작 로그
+    await _logError('verifyPhoneNumber', 'START: $phoneNumber', null);
+
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 120),
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          await _logError('verifyPhoneNumber', 'verificationCompleted', null);
+          onAutoVerify(credential);
+        },
+        verificationFailed: (FirebaseAuthException e) async {
+          await _logError(
+            'verifyPhoneNumber',
+            'verificationFailed: ${e.code} - ${e.message}',
+            e.stackTrace?.toString(),
+          );
+
+          String message;
+          switch (e.code) {
+            case 'invalid-phone-number':
+              message = '올바른 전화번호 형식이 아닙니다';
+              break;
+            case 'too-many-requests':
+              message = '요청이 너무 많습니다. 잠시 후 다시 시도해주세요';
+              break;
+            case 'quota-exceeded':
+              message = '일일 인증 한도를 초과했습니다. 내일 다시 시도해주세요';
+              break;
+            case 'app-not-authorized':
+              message = '앱 인증 설정에 문제가 있습니다';
+              break;
+            case 'captcha-check-failed':
+              message = '보안 검증에 실패했습니다. 다시 시도해주세요';
+              break;
+            case 'network-request-failed':
+              message = '네트워크 연결을 확인해주세요';
+              break;
+            default:
+              message = e.message ?? '인증에 실패했습니다';
+          }
+          onError(message);
+        },
+        codeSent: (String verificationId, int? resendToken) async {
+          await _logError('verifyPhoneNumber', 'codeSent: $verificationId', null);
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) async {
+          await _logError('verifyPhoneNumber', 'codeAutoRetrievalTimeout', null);
+        },
+      );
+    } catch (e, stack) {
+      // verifyPhoneNumber 자체에서 크래시 발생 시
+      await _logError(
+        'verifyPhoneNumber',
+        'CATCH ERROR: $e',
+        stack.toString(),
+      );
+      onError('인증 요청 중 오류가 발생했습니다: $e');
+    }
   }
 
   // OTP 코드로 로그인
