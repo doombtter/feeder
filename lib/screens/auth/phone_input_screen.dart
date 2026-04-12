@@ -41,7 +41,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
 
   Future<void> _sendOTP() async {
     final phone = _phoneController.text.trim();
-    
+
     if (phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -77,13 +77,22 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         );
       },
       onAutoVerify: (credential) async {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+        });
+
         try {
           await _authService.signInWithCredential(credential);
         } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('로그인 실패: $e')),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('로그인 실패: $e')),
+            );
+          }
         }
       },
     );
@@ -109,7 +118,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha:0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),
@@ -174,7 +183,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha:0.1),
+                          color: AppColors.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
@@ -203,7 +212,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha:0.3),
+                        color: AppColors.primary.withValues(alpha: 0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
