@@ -54,82 +54,52 @@ exports.sendPushNotification = onDocumentCreated(
       let threadId; // iOS용
 
       if (isChat && targetId) {
-        // 채팅: 같은 채팅방끼리 묶음
         androidTag = `chat_${targetId}`;
         collapseKey = `chat_${targetId}`;
         threadId = `chat_${targetId}`;
       } else if (isChatRequest) {
-        // 채팅 신청: 모든 신청을 하나로 묶음
         androidTag = "chat_requests";
         collapseKey = "chat_requests";
         threadId = "chat_requests";
       } else if (isComment && targetId) {
-        // 댓글/답글: 같은 게시글끼리 묶음
         androidTag = `post_${targetId}`;
         collapseKey = `post_${targetId}`;
         threadId = `post_${targetId}`;
       } else {
-        // 기타: 타입별로 묶음
         androidTag = type || "general";
         collapseKey = type || "general";
         threadId = type || "general";
       }
 
+      // 🔥 Data-only 메시지 (앱에서 Inbox 스타일로 표시)
+      // notification 필드 없이 data만 보내면 앱이 직접 알림 생성
       const payloadBase = {
-        notification: {
-          title: notification.title,
-          body: notification.body,
-        },
         data: {
           type: type,
           targetId: targetId,
           senderId: notification.senderId || "",
+          title: notification.title || "",
+          body: notification.body || "",
           click_action: "FLUTTER_NOTIFICATION_CLICK",
         },
         android: {
           priority: "high",
-          // 🔥 그룹화 핵심 설정
-          collapseKey: collapseKey, // 같은 키면 최신 알림만 표시
-          notification: {
-            tag: androidTag, // 같은 태그면 알림이 교체됨
-            channelId: isChat ? "chat_messages" : "default",
-            // 알림 클릭 시 앱 열기
-            clickAction: "FLUTTER_NOTIFICATION_CLICK",
-          },
+          collapseKey: collapseKey,
         },
         apns: {
           payload: {
             aps: {
+              "content-available": 1,  // 백그라운드 깨우기
               sound: "default",
               badge: 1,
-              // 🔥 iOS 그룹화
               "thread-id": threadId,
-              // 알림 요약 (iOS 15+)
-              "interruption-level": "active",
             },
+          },
+          headers: {
+            "apns-priority": "10",
           },
         },
       };
-
-      // 🔥 채팅 메시지일 때 읽지 않은 메시지 수 표시
-      if (isChat && targetId) {
-        // 해당 채팅방의 읽지 않은 알림 수 조회
-        const unreadCount = await db
-          .collection("notifications")
-          .where("userId", "==", userId)
-          .where("targetId", "==", targetId)
-          .where("isRead", "==", false)
-          .where("type", "==", "newMessage")
-          .count()
-          .get();
-
-        const count = unreadCount.data().count;
-
-        if (count > 1) {
-          // 여러 개면 "새 메시지 N개" 형태로 표시
-          payloadBase.notification.body = `새 메시지 ${count}개`;
-        }
-      }
 
       // 🔥 500개씩 분할 (FCM 제한 대응)
       const chunkSize = 500;

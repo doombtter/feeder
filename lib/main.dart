@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -8,6 +10,7 @@ import 'firebase_options.dart';
 import 'services/admob_service.dart';
 import 'services/device_service.dart';
 import 'services/post_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 // Core
@@ -28,6 +31,7 @@ import 'screens/chat/received_requests_screen.dart';
 // Services & Models
 import 'services/user_service.dart';
 import 'services/notification_service.dart';
+import 'services/local_notification_service.dart';
 import 'models/user_model.dart';
 
 /// 글로벌 네비게이터 키 (알림 클릭 시 화면 이동용)
@@ -39,6 +43,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+  // 🔔 백그라운드에서도 Inbox 스타일 알림 표시
+  await LocalNotificationService().initialize();
+  await LocalNotificationService().showInboxNotification(message);
 }
 
 void main() async {
@@ -60,6 +68,22 @@ void main() async {
   AdMobService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  // 🔔 로컬 알림 초기화
+  await LocalNotificationService().initialize();
+
+  final fcm = FirebaseMessaging.instance;
+  await fcm.requestPermission();
+  
+  final apnsToken = await fcm.getAPNSToken();
+  final fcmToken = await fcm.getToken();
+  
+  // Firestore에 저장
+  await FirebaseFirestore.instance.collection('debug_logs').add({
+    'apnsToken': apnsToken,
+    'fcmToken': fcmToken,
+    'platform': Platform.isIOS ? 'iOS' : 'Android',
+    'timestamp': FieldValue.serverTimestamp(),
+  });
   runApp(const FeederApp());
 }
 
@@ -416,9 +440,58 @@ class _ProfileCheckWrapperState extends State<ProfileCheckWrapper> {
     _notificationService.initialize(uid);
     _deviceService.recordLogin(uid);
 
+    // 🔔 로컬 알림 클릭 핸들러 설정
+    LocalNotificationService().onNotificationTap = (type, targetId) {
+      _handleLocalNotificationTap(type, targetId);
+    };
+
+    // 🔔 포그라운드 메시지 → Inbox 스타일로 표시
     FirebaseMessaging.onMessage.listen((message) {
       debugPrint('포그라운드 메시지: ${message.notification?.title}');
+      LocalNotificationService().showInboxNotification(message);
     });
+  }
+
+  /// 로컬 알림 클릭 처리
+  void _handleLocalNotificationTap(String type, String targetId) async {
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+
+    switch (type) {
+      case 'chatRequest':
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ReceivedRequestsScreen()),
+          (route) => route.isFirst,
+        );
+        break;
+
+      case 'chatAccepted':
+      case 'newMessage':
+        if (targetId.isNotEmpty) {
+          // 알림 캐시 삭제
+          LocalNotificationService().clearChatRoomCache(targetId);
+          navigator.pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) => ChatRoomScreen(chatRoomId: targetId),
+            ),
+            (route) => route.isFirst,
+          );
+        }
+        break;
+
+      case 'newComment':
+      case 'newReply':
+        if (targetId.isNotEmpty) {
+          final post = await PostService().getPost(targetId);
+          if (post != null) {
+            navigator.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => PostDetailScreen(post: post)),
+              (route) => route.isFirst,
+            );
+          }
+        }
+        break;
+    }
   }
 
   @override

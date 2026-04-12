@@ -14,6 +14,7 @@ import '../../models/report_model.dart';
 import '../../models/video_quota_model.dart';
 import '../../services/chat_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/local_notification_service.dart';
 import '../../services/report_service.dart';
 import '../../services/s3_service.dart';
 import '../../services/video_service.dart';
@@ -64,6 +65,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     _chatService.markAsRead(widget.chatRoomId, _uid);
     // 채팅방 관련 앱 내 알림도 읽음 처리
     _notificationService.markChatRoomNotificationsAsRead(_uid, widget.chatRoomId);
+    // 🔔 로컬 알림 캐시 삭제 (Inbox 스타일 초기화)
+    LocalNotificationService().clearChatRoomCache(widget.chatRoomId);
     _loadMembershipInfo();
     _loadInitialMessages();
     _scrollController.addListener(_onScroll);
