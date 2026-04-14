@@ -11,13 +11,13 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   # Firebase - 호환되는 버전으로 다운그레이드
-  firebase_core: ^2.32.0
-  firebase_auth: ^4.20.0
-  cloud_firestore: ^4.17.5
-  firebase_messaging: ^14.9.4
-  firebase_analytics: ^10.10.7
-  firebase_crashlytics: ^3.5.7
-  cloud_functions: ^4.7.6
+  firebase_core: ^3.3.0
+  firebase_auth: ^5.3.0
+  cloud_firestore: ^5.4.0
+  firebase_messaging: ^15.1.0
+  firebase_analytics: ^11.3.0
+  firebase_crashlytics: ^4.1.0
+  cloud_functions: ^5.1.0
   
   # 나머지는 그대로
   image_picker: ^1.0.7
@@ -37,7 +37,7 @@ dependencies:
   video_compress: ^3.1.2
   agora_rtc_engine: ^6.3.2
   flutter_launcher_icons: ^0.14.4
-  google_sign_in: ^7.2.0
+  google_sign_in: ^6.2.1
   sign_in_with_apple: ^7.0.1
   device_info_plus: ^10.1.0
   package_info_plus: ^8.0.0
