@@ -39,63 +39,49 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _isLoading = true;
-      _loadingProvider = 'google';
-    });
+Future<void> _signInWithGoogle() async {
+  setState(() {
+    _isLoading = true;
+    _loadingProvider = 'google';
+  });
 
-    try {
-      // 초기화 확인
-      if (!_googleInitialized) {
-        await GoogleSignIn.instance.initialize();
-        _googleInitialized = true;
-      }
-
-      // 1. 인증 수행 (사용자 선택)
-      final googleUser = await GoogleSignIn.instance.authenticate();
-      
-      // 2. idToken 가져오기 (authentication에서)
-      final idToken = googleUser.authentication.idToken;
-      
-      // 3. accessToken 가져오기 (authorizationClient에서)
-      final List<String> scopes = ['email', 'profile'];
-      final authorization = await googleUser.authorizationClient.authorizeScopes(scopes);
-      
-      // 4. Firebase Credential 생성
-      final credential = GoogleAuthProvider.credential(
-        idToken: idToken,
-        accessToken: authorization.accessToken,
-      );
-
-      // 5. Firebase에 로그인
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-      
-      // 새 로그인 표시 (전화번호 인증 필요)
-      AuthWrapper.markNewLogin();
-      
-      if (mounted) {
-        _proceedToPhoneLink(userCredential.user!);
-      }
-    } on GoogleSignInException catch (e) {
+  try {
+    // 6.x 버전 API
+    final GoogleSignIn googleSignIn = GoogleSignIn();
+    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+    
+    if (googleUser == null) {
+      // 사용자 취소
       setState(() {
         _isLoading = false;
         _loadingProvider = null;
       });
-      // 사용자 취소는 에러 표시 안함
-      if (e.code != GoogleSignInExceptionCode.canceled) {
-        _showError('Google 로그인에 실패했습니다');
-      }
-      debugPrint('Google sign-in error: ${e.code} - ${e.description}');
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _loadingProvider = null;
-      });
-      _showError('Google 로그인에 실패했습니다');
-      debugPrint('Google sign-in error: $e');
+      return;
     }
+    
+    final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+    
+    final credential = GoogleAuthProvider.credential(
+      idToken: googleAuth.idToken,
+      accessToken: googleAuth.accessToken,
+    );
+
+    final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+    
+    AuthWrapper.markNewLogin();
+    
+    if (mounted) {
+      _proceedToPhoneLink(userCredential.user!);
+    }
+  } catch (e) {
+    setState(() {
+      _isLoading = false;
+      _loadingProvider = null;
+    });
+    _showError('Google 로그인에 실패했습니다');
+    debugPrint('Google sign-in error: $e');
   }
+}
 
   Future<void> _signInWithApple() async {
     setState(() {
