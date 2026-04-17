@@ -49,6 +49,12 @@
 					<string>com.feeder.feeder</string>
 				</array>
 			</dict>
+			<dict>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>app-1-663777820227-ios-aec543ed76a3825a581ef6</string>
+				</array>
+			</dict>
 		</array>
 		<key>GIDClientID</key>
 		<string>663777820227-tdfbv9ad6rdro97riqlc7utrdh95bchp.apps.googleusercontent.com</string>

@@ -74,8 +74,17 @@ void main() async {
   final fcm = FirebaseMessaging.instance;
   await fcm.requestPermission();
   
-  final apnsToken = await fcm.getAPNSToken();
-  final fcmToken = await fcm.getToken();
+  String? apnsToken;
+  String? fcmToken;
+
+  try {
+    if (Platform.isIOS) {
+      apnsToken = await fcm.getAPNSToken();
+    }
+    fcmToken = await fcm.getToken();
+  } catch (e) {
+    debugPrint('FCM 토큰 오류 (무시): $e');
+  }
   
   // Firestore에 저장
   await FirebaseFirestore.instance.collection('debug_logs').add({
