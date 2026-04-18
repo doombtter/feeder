@@ -19,6 +19,7 @@ class ProfileEditScreen extends StatefulWidget {
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _nicknameController = TextEditingController();
   final _bioController = TextEditingController();
+  final _regionController = TextEditingController();
   final _userService = UserService();
 
   String? _selectedRegion;
@@ -26,6 +27,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   List<String> _existingImageUrls = [];
   bool _isLoading = false;
   bool _nicknameChanged = false;
+
+  /// 해외 사용자 여부 (country가 '대한민국'이 아니면 해외로 간주)
+  late final bool _isOverseas;
 
   final List<String> _regions = [
     '서울특별시', '부산광역시', '대구광역시', '인천광역시', '광주광역시',
@@ -39,14 +43,30 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     super.initState();
     _nicknameController.text = widget.user.nickname;
     _bioController.text = widget.user.bio;
-    _selectedRegion = widget.user.region;
     _existingImageUrls = List.from(widget.user.profileImageUrls);
+
+    // 국가 기준으로 국내/해외 판정
+    // country가 비어있는 구버전 사용자는 기본 '대한민국'(UserModel에서 자동 처리) → 국내 취급
+    _isOverseas = widget.user.country.isNotEmpty &&
+        widget.user.country != '대한민국';
+
+    if (_isOverseas) {
+      // 해외: 텍스트 입력에 기존 값 세팅
+      _regionController.text = widget.user.region;
+    } else {
+      // 국내: 드롭다운에 기존 값이 목록에 있을 때만 세팅
+      // (외국에서 국내로 전환되는 경우는 없지만, 혹시 과거 자유입력 값이 있으면 비워둠)
+      if (_regions.contains(widget.user.region)) {
+        _selectedRegion = widget.user.region;
+      }
+    }
   }
 
   @override
   void dispose() {
     _nicknameController.dispose();
     _bioController.dispose();
+    _regionController.dispose();
     super.dispose();
   }
 
@@ -112,6 +132,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final nickname = _nicknameController.text.trim();
     final bio = _bioController.text.trim();
 
+    // 해외: 텍스트 입력값, 국내: 드롭다운 선택값
+    final region = _isOverseas
+        ? _regionController.text.trim()
+        : (_selectedRegion ?? '');
+
     if (nickname.isEmpty) {
       _showError('닉네임을 입력해주세요');
       return;
@@ -120,8 +145,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _showError('닉네임은 2~10자로 입력해주세요');
       return;
     }
-    if (_selectedRegion == null) {
-      _showError('지역을 선택해주세요');
+    if (region.isEmpty) {
+      _showError(_isOverseas ? '지역을 입력해주세요' : '지역을 선택해주세요');
+      return;
+    }
+    if (_isOverseas && region.length > 30) {
+      _showError('지역은 30자 이내로 입력해주세요');
       return;
     }
 
@@ -151,7 +180,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         bio: bio,
         birthYear: widget.user.birthYear,
         gender: widget.user.gender,
-        region: _selectedRegion!,
+        country: widget.user.country,
+        region: region,
         profileImageUrls: allImageUrls,
         nicknameChanged: _nicknameChanged,
       );
@@ -321,32 +351,47 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
             const SizedBox(height: 24),
 
+            // 국가 (수정 불가 - 전화번호 기준 자동 설정)
+            _buildSectionTitle('국가'),
+            const SizedBox(height: 10),
+            _buildLockedField(
+              value: widget.user.country.isEmpty ? '알 수 없음' : widget.user.country,
+            ),
+            const SizedBox(height: 24),
+
             // 지역
             _buildSectionTitle('지역'),
             const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: DropdownButtonFormField<String>(
-                value: _selectedRegion,
-                dropdownColor: AppColors.card,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            if (_isOverseas)
+              _buildTextField(
+                controller: _regionController,
+                hintText: '거주 중인 지역을 입력해주세요 (예: Tokyo)',
+                maxLength: 30,
+              )
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
                 ),
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary),
-                items: _regions.map((region) {
-                  return DropdownMenuItem(value: region, child: Text(region));
-                }).toList(),
-                onChanged: (value) {
-                  setState(() => _selectedRegion = value);
-                },
+                child: DropdownButtonFormField<String>(
+                  value: _selectedRegion,
+                  dropdownColor: AppColors.card,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  ),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.textSecondary),
+                  items: _regions.map((region) {
+                    return DropdownMenuItem(value: region, child: Text(region));
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedRegion = value);
+                  },
+                ),
               ),
-            ),
             const SizedBox(height: 100),
           ],
         ),

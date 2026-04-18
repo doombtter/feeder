@@ -352,7 +352,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       const SizedBox(height: 16),
                       _buildInfoRow(Icons.cake_rounded, '${_user!.age}세'),
                       const SizedBox(height: 10),
-                      _buildInfoRow(Icons.location_on_rounded, _user!.region),
+                      _buildInfoRow(Icons.location_on_rounded, _user!.displayLocation),
                     ],
                   ),
                 ),
@@ -414,11 +414,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           child: Icon(icon, size: 16, color: AppColors.textTertiary),
         ),
         const SizedBox(width: 10),
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: 15,
-            color: AppColors.textSecondary,
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textSecondary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

@@ -209,11 +209,15 @@ class MyProfileScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  '${user.gender == 'male' ? '남' : '여'} · ${user.age}세 · ${user.region}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+                Flexible(
+                  child: Text(
+                    '${user.gender == 'male' ? '남' : '여'} · ${user.age}세 · ${user.displayLocation}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

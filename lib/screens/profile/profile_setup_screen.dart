@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/country_codes.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -67,6 +68,7 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _nicknameController = TextEditingController();
   final _bioController = TextEditingController();
+  final _regionController = TextEditingController();
   final _userService = UserService();
   final _authService = AuthService();
 
@@ -75,6 +77,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   String? _selectedRegion;
   File? _profileImage;
   bool _isLoading = false;
+
+  /// 전화번호 국가 코드로 자동 판정된 국가명 (수정 불가)
+  late final String _country;
+
+  /// 해외 번호(+82가 아닌 번호)로 로그인했는지 여부
+  /// true면 지역을 드롭다운 대신 직접 입력으로 받음
+  late final bool _isOverseas;
 
   late final List<int> _birthYears;
   
@@ -101,10 +110,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   @override
   void initState() {
     super.initState();
+
+    // 현재 로그인된 전화번호로 국가 자동 판정
+    final phoneNumber = FirebaseAuth.instance.currentUser?.phoneNumber ?? '';
+    _isOverseas = !CountryCodes.isKorean(phoneNumber);
+    _country = CountryCodes.fromPhoneNumber(phoneNumber);
+
+    // 만 19세 이상만 선택 가능하도록 출생년도 리스트 생성
+    // (출생년도만으로 계산: 올해 - 19 이하만 노출)
     final currentYear = DateTime.now().year;
+    final maxBirthYear = currentYear - 19; // 만 19세가 되는 출생년도 상한
+    const minBirthYear = 1945; // 하한 (기존 1945년과 동일)
     _birthYears = List.generate(
-      currentYear - 1944 - 13,
-      (index) => currentYear - 14 - index,
+      maxBirthYear - minBirthYear + 1,
+      (index) => maxBirthYear - index,
     );
   }
 
@@ -112,6 +131,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   void dispose() {
     _nicknameController.dispose();
     _bioController.dispose();
+    _regionController.dispose();
     super.dispose();
   }
 
@@ -135,6 +155,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     final nickname = _nicknameController.text.trim();
     final bio = _bioController.text.trim();
 
+    // 해외: 직접 입력값, 국내: 드롭다운 선택값
+    final region = _isOverseas
+        ? _regionController.text.trim()
+        : (_selectedRegion ?? '');
+
     if (nickname.isEmpty) {
       _showError('닉네임을 입력해주세요');
       return;
@@ -151,8 +176,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       _showError('성별을 선택해주세요');
       return;
     }
-    if (_selectedRegion == null) {
-      _showError('지역을 선택해주세요');
+    if (region.isEmpty) {
+      _showError(_isOverseas ? '지역을 입력해주세요' : '지역을 선택해주세요');
+      return;
+    }
+    if (_isOverseas && region.length > 30) {
+      _showError('지역은 30자 이내로 입력해주세요');
       return;
     }
 
@@ -175,7 +204,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         bio: bio,
         birthYear: _selectedBirthYear!,
         gender: _selectedGender!,
-        region: _selectedRegion!,
+        country: _country,
+        region: region,
         profileImageUrl: profileImageUrl,
       );
 
@@ -375,20 +405,36 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             ),
             const SizedBox(height: 24),
 
+            // 국가 (전화번호 기준 자동 설정, 수정 불가)
+            _buildSectionTitle('국가'),
+            const SizedBox(height: 8),
+            _buildLockedField(
+              value: _country.isEmpty ? '알 수 없음' : _country,
+              hint: '가입 시 전화번호를 기준으로 자동 설정됩니다',
+            ),
+            const SizedBox(height: 24),
+
             // 지역
             _buildSectionTitle('지역', required: true),
             const SizedBox(height: 8),
-            _buildDropdown<String>(
-              value: _selectedRegion,
-              hint: '지역 선택',
-              items: _regions.map((region) {
-                return DropdownMenuItem(
-                  value: region,
-                  child: Text(region),
-                );
-              }).toList(),
-              onChanged: (value) => setState(() => _selectedRegion = value),
-            ),
+            if (_isOverseas)
+              _buildTextField(
+                controller: _regionController,
+                hintText: '거주 중인 지역을 입력해주세요 (예: Tokyo)',
+                maxLength: 30,
+              )
+            else
+              _buildDropdown<String>(
+                value: _selectedRegion,
+                hint: '지역 선택',
+                items: _regions.map((region) {
+                  return DropdownMenuItem(
+                    value: region,
+                    child: Text(region),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => _selectedRegion = value),
+              ),
             const SizedBox(height: 40),
 
             // 저장 버튼
@@ -523,6 +569,46 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           onChanged: onChanged,
         ),
       ),
+    );
+  }
+
+  Widget _buildLockedField({required String value, String? hint}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.lock_rounded, size: 16, color: AppColors.textTertiary),
+            ],
+          ),
+        ),
+        if (hint != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            hint,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

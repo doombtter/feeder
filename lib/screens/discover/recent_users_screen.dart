@@ -512,9 +512,13 @@ class _UserCard extends StatelessWidget {
                     children: [
                       Icon(Icons.location_on_outlined, size: 14, color: AppColors.textTertiary),
                       const SizedBox(width: 2),
-                      Text(
-                        user.region,
-                        style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                      Flexible(
+                        child: Text(
+                          user.displayLocation,
+                          style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       if (lastSeenText != null) ...[
                         const SizedBox(width: 8),

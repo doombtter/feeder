@@ -154,6 +154,8 @@ class PurchaseService {
   }
 
   /// 개별 구매 처리
+  /// 클라이언트는 purchases 컬렉션에 'pending_verification' 문서만 생성.
+  /// Cloud Functions의 verifyPurchase가 실제 검증 + 포인트/구독 지급을 담당.
   Future<void> _handlePurchase(PurchaseDetails purchase) async {
     if (purchase.status == PurchaseStatus.pending) {
       debugPrint('Purchase pending: ${purchase.productID}');
@@ -170,12 +172,8 @@ class PurchaseService {
 
     if (purchase.status == PurchaseStatus.purchased ||
         purchase.status == PurchaseStatus.restored) {
-      // 영수증 검증 및 포인트 지급
-      final verified = await _verifyPurchase(purchase);
-
-      if (verified) {
-        await _deliverProduct(purchase);
-      }
+      // 서버 검증 요청 (영수증 저장만, 실제 지급은 Cloud Functions가 처리)
+      await _submitForServerVerification(purchase);
     }
 
     if (purchase.pendingCompletePurchase) {
@@ -183,13 +181,14 @@ class PurchaseService {
     }
   }
 
-  /// 영수증 검증 (Firebase Functions 호출)
-  Future<bool> _verifyPurchase(PurchaseDetails purchase) async {
+  /// 서버 검증용 영수증 제출
+  /// Cloud Functions의 onDocumentCreated 트리거가 이 문서 생성을 감지하여
+  /// Google Play / App Store API로 검증 후 포인트/구독을 지급한다.
+  Future<bool> _submitForServerVerification(PurchaseDetails purchase) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return false;
 
     try {
-      // Firestore에 구매 기록 저장 (Cloud Functions가 검증 처리)
       await _firestore.collection('purchases').add({
         'userId': uid,
         'productId': purchase.productID,
@@ -198,77 +197,15 @@ class PurchaseService {
         'platform': Platform.isIOS ? 'ios' : 'android',
         'verificationData': Platform.isIOS
             ? purchase.verificationData.serverVerificationData
-            : purchase.verificationData.localVerificationData,
+            : purchase.verificationData.serverVerificationData,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      debugPrint('✅ Purchase submitted for server verification: ${purchase.productID}');
       return true;
     } catch (e) {
-      debugPrint('Verification failed: $e');
+      debugPrint('❌ Failed to submit purchase for verification: $e');
       return false;
-    }
-  }
-
-  /// 상품 지급
-  Future<void> _deliverProduct(PurchaseDetails purchase) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    final productId = purchase.productID;
-
-    if (ProductIds.consumables.contains(productId)) {
-      // 포인트 지급
-      final pointProduct = pointProducts.firstWhere(
-        (p) => p.id == productId,
-        orElse: () => const PointProduct(id: '', points: 0),
-      );
-
-      if (pointProduct.points > 0) {
-        await _firestore.collection('users').doc(uid).update({
-          'points': FieldValue.increment(pointProduct.totalPoints),
-        });
-
-        // 구매 기록 업데이트
-        await _updatePurchaseStatus(purchase.purchaseID!, 'completed');
-      }
-    } else if (ProductIds.subscriptions.contains(productId)) {
-      // 구독 활성화 (프리미엄 또는 MAX)
-      final isYearly = productId == ProductIds.premiumYearly || 
-                       productId == ProductIds.maxYearly;
-      final isMax = productId == ProductIds.maxMonthly || 
-                    productId == ProductIds.maxYearly;
-      
-      final expiresAt = isYearly
-          ? DateTime.now().add(const Duration(days: 365))
-          : DateTime.now().add(const Duration(days: 30));
-
-      final tier = isMax ? MembershipTier.max : MembershipTier.premium;
-
-      await _firestore.collection('users').doc(uid).update({
-        'isPremium': true,
-        'isMax': isMax,
-        'premiumExpiresAt': Timestamp.fromDate(expiresAt),
-        'subscriptionProductId': productId,
-        'dailyFreeChats': MembershipBenefits.getDailyFreeChats(tier),
-      });
-
-      await _updatePurchaseStatus(purchase.purchaseID!, 'completed');
-    }
-  }
-
-  /// 구매 상태 업데이트
-  Future<void> _updatePurchaseStatus(String purchaseId, String status) async {
-    final query = await _firestore
-        .collection('purchases')
-        .where('purchaseId', isEqualTo: purchaseId)
-        .limit(1)
-        .get();
-
-    if (query.docs.isNotEmpty) {
-      await query.docs.first.reference.update({
-        'status': status,
-        'completedAt': FieldValue.serverTimestamp(),
-      });
     }
   }
 
@@ -277,7 +214,9 @@ class PurchaseService {
     await _iap.restorePurchases();
   }
 
-  /// 멤버십 등급 확인
+  /// 멤버십 등급 확인 (읽기 전용)
+  /// 만료 처리는 서버(checkPremiumExpiry 스케줄러 + RTDN/App Store Notifications)가 담당.
+  /// 이 함수는 현재 Firestore 상태를 읽어서 만료 시각을 로컬에서 재확인할 뿐이다.
   Future<MembershipTier> checkMembershipTier() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return MembershipTier.free;
@@ -292,12 +231,8 @@ class PurchaseService {
 
     if (!isPremium || expiresAt == null) return MembershipTier.free;
 
-    // 만료 확인
+    // 서버 동기화 지연 대비: 클라이언트에서도 만료 시각 체크 (읽기 전용)
     if (expiresAt.isBefore(DateTime.now())) {
-      await _firestore.collection('users').doc(uid).update({
-        'isPremium': false,
-        'isMax': false,
-      });
       return MembershipTier.free;
     }
 

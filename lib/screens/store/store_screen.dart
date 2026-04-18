@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
@@ -134,22 +135,45 @@ class _StoreScreenState extends State<StoreScreen>
   }
 
   Future<void> _claimRatingReward() async {
-    await _firestore.collection('users').doc(_uid).update({
-      'points': FieldValue.increment(70),
-      'hasClaimedRatingReward': true,
-    });
-    
-    setState(() {
-      _currentPoints += 70;
-      _hasClaimedRatingReward = true;
-    });
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('claimRatingReward');
+      final result = await callable.call();
+      final data = Map<String, dynamic>.from(result.data as Map);
 
-    if (mounted) {
+      if (data['success'] == true) {
+        final granted = (data['points'] as num?)?.toInt() ?? 70;
+        final newBalance = (data['newBalance'] as num?)?.toInt();
+
+        setState(() {
+          _currentPoints = newBalance ?? (_currentPoints + granted);
+          _hasClaimedRatingReward = true;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🎉 평점 보상 ${granted}P가 지급되었습니다!'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      final msg = e.code == 'already-exists'
+          ? '이미 평점 보상을 수령하셨습니다'
+          : '보상 수령 실패: ${e.message ?? e.code}';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🎉 평점 보상 70P가 지급되었습니다!'),
-          backgroundColor: AppColors.primary,
-        ),
+        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+      );
+      // 이미 수령 케이스는 상태 동기화
+      if (e.code == 'already-exists') {
+        setState(() => _hasClaimedRatingReward = true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('보상 수령 실패: $e'), backgroundColor: AppColors.error),
       );
     }
   }
@@ -160,27 +184,50 @@ class _StoreScreenState extends State<StoreScreen>
       context,
       MaterialPageRoute(builder: (context) => const _PolicyRewardScreen()),
     );
-    
-    // 보상 지급 (최초 1회)
-    if (!_hasClaimedPolicyReward) {
-      await _firestore.collection('users').doc(_uid).update({
-        'points': FieldValue.increment(50),
-        'hasClaimedPolicyReward': true,
-      });
-      
-      setState(() {
-        _currentPoints += 50;
-        _hasClaimedPolicyReward = true;
-      });
 
-      if (mounted) {
+    if (_hasClaimedPolicyReward) return;
+
+    // 서버에 보상 요청 (서버가 중복 지급 방지)
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('claimPolicyReward');
+      final result = await callable.call();
+      final data = Map<String, dynamic>.from(result.data as Map);
+
+      if (data['success'] == true) {
+        final granted = (data['points'] as num?)?.toInt() ?? 50;
+        final newBalance = (data['newBalance'] as num?)?.toInt();
+
+        setState(() {
+          _currentPoints = newBalance ?? (_currentPoints + granted);
+          _hasClaimedPolicyReward = true;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🎉 정책 확인 보상 ${granted}P가 지급되었습니다!'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      if (e.code == 'already-exists') {
+        setState(() => _hasClaimedPolicyReward = true);
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎉 정책 확인 보상 50P가 지급되었습니다!'),
-            backgroundColor: AppColors.primary,
+          SnackBar(
+            content: Text('보상 수령 실패: ${e.message ?? e.code}'),
+            backgroundColor: AppColors.error,
           ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('보상 수령 실패: $e'), backgroundColor: AppColors.error),
+      );
     }
   }
 

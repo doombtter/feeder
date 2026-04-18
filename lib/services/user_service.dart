@@ -38,6 +38,7 @@ class UserService {
     required String bio,
     required int birthYear,
     required String gender,
+    required String country,
     required String region,
     required List<String> profileImageUrls,
     required bool nicknameChanged,
@@ -47,6 +48,7 @@ class UserService {
       'bio': bio,
       'birthYear': birthYear,
       'gender': gender,
+      'country': country,
       'region': region,
       'profileImageUrls': profileImageUrls,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -66,6 +68,7 @@ class UserService {
     required String bio,
     required int birthYear,
     required String gender,
+    required String country,
     required String region,
     String? profileImageUrl,
   }) async {
@@ -79,6 +82,7 @@ class UserService {
         'bio': bio,
         'birthYear': birthYear,
         'gender': gender,
+        'country': country,
         'region': region,
         'updatedAt': FieldValue.serverTimestamp(),
         'lastSeenAt': FieldValue.serverTimestamp(),  // 추가!
@@ -105,6 +109,7 @@ class UserService {
         'bio': bio,
         'birthYear': birthYear,
         'gender': gender,
+        'country': country,
         'region': region,
         'profileImageUrl': profileImageUrl ?? '',
         'points': 100,  // 초기 포인트 지급

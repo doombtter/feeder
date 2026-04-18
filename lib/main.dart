@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'firebase_options.dart';
 import 'services/admob_service.dart';
 import 'services/device_service.dart';
 import 'services/post_service.dart';
+import 'services/purchase_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
@@ -67,6 +69,10 @@ void main() async {
 
   AdMobService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // 💰 인앱 결제 초기화 (purchaseStream 리스너를 앱 시작 시 활성화)
+  // 스토어 화면 밖에서 들어오는 구매(가족 공유 구독 등)를 놓치지 않기 위함
+  unawaited(PurchaseService().initialize());
 
   // 🔔 로컬 알림 초기화
   await LocalNotificationService().initialize();

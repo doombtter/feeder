@@ -9,6 +9,7 @@ class UserModel {
   final List<String> profileImageUrls;  // 최대 3개
   final int birthYear;
   final String gender;
+  final String country;  // 국가명 (예: "대한민국", "일본", "미국")
   final String region;
   final int points;
   final int receivedRequestCount;
@@ -47,6 +48,7 @@ class UserModel {
     this.profileImageUrls = const [],
     this.birthYear = 0,
     this.gender = '',
+    this.country = '',
     this.region = '',
     this.points = 0,
     this.receivedRequestCount = 0,
@@ -135,6 +137,10 @@ class UserModel {
       profileImageUrls: imageUrls,
       birthYear: data['birthYear'] ?? 0,
       gender: data['gender'] ?? '',
+      // 기존 사용자(country 필드 없음)는 대한민국으로 간주 - 자동 마이그레이션
+      country: (data['country'] ?? '').toString().isEmpty
+          ? (data['region'] ?? '').toString().isNotEmpty ? '대한민국' : ''
+          : data['country'],
       region: data['region'] ?? '',
       points: data['points'] ?? 0,
       receivedRequestCount: data['receivedRequestCount'] ?? 0,
@@ -171,6 +177,7 @@ class UserModel {
       'profileImageUrls': profileImageUrls,
       'birthYear': birthYear,
       'gender': gender,
+      'country': country,
       'region': region,
       'points': points,
       'receivedRequestCount': receivedRequestCount,
@@ -201,6 +208,14 @@ class UserModel {
   // 특정 유저 차단 여부 확인
   bool isBlocked(String userId) {
     return blockedUsers.contains(userId);
+  }
+
+  /// 지역 표시용 문자열 ("국가 · 지역" 형식)
+  /// country가 비어있으면 region만 반환 (구버전 호환)
+  String get displayLocation {
+    if (country.isEmpty) return region;
+    if (region.isEmpty) return country;
+    return '$country · $region';
   }
 
   bool get isProfileComplete {
