@@ -180,38 +180,40 @@ class MembershipIcon extends StatelessWidget {
 /// 멤버십 혜택 정보
 class MembershipBenefits {
   // 일일 무료 채팅
+  // Free 1회, Premium 1회(Free와 동일이지만 아래 다른 혜택으로 차별), MAX 3회
   static int getDailyFreeChats(MembershipTier tier) {
     switch (tier) {
       case MembershipTier.free:
         return 1;
       case MembershipTier.premium:
-        return 2;
+        return 1;
       case MembershipTier.max:
         return 3;
     }
   }
 
   // 일일 동영상 전송 횟수 (본인)
+  // Premium 3개, MAX 10개 (격차 확대)
   static int getDailyVideoLimit(MembershipTier tier) {
     switch (tier) {
       case MembershipTier.free:
         return 0;  // 프리미엄과 채팅 시에만 권한 부여받음
       case MembershipTier.premium:
-        return 5;
+        return 3;
       case MembershipTier.max:
         return 10;
     }
   }
 
-  // 상대방에게 부여하는 동영상 권한 횟수 (한번에 3회씩)
+  // 상대방에게 부여하는 동영상 권한 횟수 (한번에 N회씩)
   static int getGrantedVideoLimit(MembershipTier tier) {
     switch (tier) {
       case MembershipTier.free:
         return 0;
       case MembershipTier.premium:
-        return 3;  // 한번에 3회
+        return 3;
       case MembershipTier.max:
-        return 6;  // 한번에 6회
+        return 6;
     }
   }
 
@@ -258,6 +260,7 @@ class MembershipBenefits {
   }
 
   // 일일 랜덤 전화 횟수
+  // Premium 약화: 남성 3→2, 여성 7→6
   static int getDailyRandomCalls(MembershipTier tier, {String? gender}) {
     // 여성 기본 5회
     final isFemale = gender == 'female';
@@ -266,7 +269,7 @@ class MembershipBenefits {
       case MembershipTier.free:
         return isFemale ? 5 : 1;
       case MembershipTier.premium:
-        return isFemale ? 7 : 3;  // +2
+        return isFemale ? 6 : 2;  // +1
       case MembershipTier.max:
         return isFemale ? 13 : 9;  // +8
     }

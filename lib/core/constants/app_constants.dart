@@ -36,7 +36,7 @@ class AppConstants {
 
   // 포인트
   static const int chatRequestCost = 50;
-  static const int initialPoints = 100;
+  static const int initialPoints = 0;
   static const int randomCallCost = 30;  // 추가 랜덤통화 비용
 
   // 시간 (일)

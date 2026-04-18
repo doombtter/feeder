@@ -108,10 +108,10 @@ class UserModel {
     final resetDate = DateTime(dailyFreeChatsResetAt!.year, dailyFreeChatsResetAt!.month, dailyFreeChatsResetAt!.day);
     final today = DateTime(now.year, now.month, now.day);
     
-    // 날짜가 바뀌었으면 리셋 (MAX 3회, 프리미엄 2회, 일반 1회)
+    // 날짜가 바뀌었으면 리셋 (MAX 3회, 프리미엄 1회, Free 1회)
     if (today.isAfter(resetDate)) {
       if (isMax) return 3;
-      if (isPremium) return 2;
+      if (isPremium) return 1;  // 프리미엄 약화: 2→1
       return 1;
     }
     return dailyFreeChats;

@@ -762,7 +762,7 @@ class _StoreScreenState extends State<StoreScreen>
 
             _buildSubscriptionCard(
               title: '연간 구독',
-              price: _purchaseService.getPrice(ProductIds.premiumYearly) ?? '₩39,000',
+              price: _purchaseService.getPrice(ProductIds.premiumYearly) ?? '₩59,900',
               period: '/년',
               isPopular: true,
               discount: '33% 할인',
@@ -1154,7 +1154,7 @@ class _StoreScreenState extends State<StoreScreen>
 
             _buildMaxSubscriptionCard(
               title: 'MAX 연간',
-              price: _purchaseService.getPrice(ProductIds.maxYearly) ?? '₩129,000',
+              price: _purchaseService.getPrice(ProductIds.maxYearly) ?? '₩109,000',
               period: '/년',
               isPopular: true,
               discount: '약 28% 할인',

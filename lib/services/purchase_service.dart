@@ -11,22 +11,24 @@ class ProductIds {
   // 포인트 충전 (소모성)
   static const String points100 = 'points_100';
   static const String points300 = 'points_300';
-  static const String points500 = 'points_500';
-  static const String points1000 = 'points_1000';
+  static const String points700 = 'points_700';
+  static const String points1500 = 'points_1500';
+  static const String points4000 = 'points_4000';
 
   // 프리미엄 구독 (월정액)
-  static const String premiumMonthly = 'premium_monthly';
-  static const String premiumYearly = 'premium_yearly';
+  static const String premiumMonthly = 'premiummonthly';
+  static const String premiumYearly = 'premiumyearly';
 
   // MAX 구독 (월정액)
-  static const String maxMonthly = 'max_monthly';
-  static const String maxYearly = 'max_yearly';
+  static const String maxMonthly = 'maxmonthly';
+  static const String maxYearly = 'maxyearly';
 
   static const List<String> consumables = [
     points100,
     points300,
-    points500,
-    points1000,
+    points700,
+    points1500,
+    points4000,
   ];
 
   static const List<String> subscriptions = [
@@ -43,14 +45,15 @@ class ProductIds {
   
   // 테스트용 폴백 가격 (스토어 연결 전 개발용)
   static const Map<String, String> fallbackPrices = {
-    points100: '₩1,100',
-    points300: '₩3,300',
-    points500: '₩5,500',
-    points1000: '₩11,000',
+    points100: '₩1,200',
+    points300: '₩3,900',
+    points700: '₩8,900',
+    points1500: '₩19,900',
+    points4000: '₩49,900',
     premiumMonthly: '₩7,900',
-    premiumYearly: '₩69,000',
+    premiumYearly: '₩59,900',
     maxMonthly: '₩14,900',
-    maxYearly: '₩129,000',
+    maxYearly: '₩109,000',
   };
 }
 
@@ -71,9 +74,10 @@ class PointProduct {
 
 const List<PointProduct> pointProducts = [
   PointProduct(id: ProductIds.points100, points: 100),
-  PointProduct(id: ProductIds.points300, points: 300, bonusPoints: 30),
-  PointProduct(id: ProductIds.points500, points: 500, bonusPoints: 75),
-  PointProduct(id: ProductIds.points1000, points: 1000, bonusPoints: 200),
+  PointProduct(id: ProductIds.points300, points: 300, bonusPoints: 50),
+  PointProduct(id: ProductIds.points700, points: 700, bonusPoints: 150),
+  PointProduct(id: ProductIds.points1500, points: 1500, bonusPoints: 500),
+  PointProduct(id: ProductIds.points4000, points: 4000, bonusPoints: 1500),
 ];
 
 /// 결제 서비스

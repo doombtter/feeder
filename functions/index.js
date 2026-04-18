@@ -33,7 +33,6 @@ const APP_STORE_PRIVATE_KEY = defineSecret("APP_STORE_PRIVATE_KEY");
 const APP_STORE_KEY_ID = defineSecret("APP_STORE_KEY_ID");
 // App Store Connect: Issuer ID (UUID 형식)
 const APP_STORE_ISSUER_ID = defineSecret("APP_STORE_ISSUER_ID");
-// App Store Connect: 번들 ID (예: "com.feeder.app")
 const APP_STORE_BUNDLE_ID = defineSecret("APP_STORE_BUNDLE_ID");
 
 // Android 패키지 이름 (package.json 또는 build.gradle과 동일)
@@ -174,17 +173,18 @@ exports.sendPushNotification = onDocumentCreated(
 // 포인트 상품 정보 (서버 단일 원천)
 const POINT_PRODUCTS = {
   points_100: { points: 100, bonus: 0 },
-  points_300: { points: 300, bonus: 30 },
-  points_500: { points: 500, bonus: 75 },
-  points_1000: { points: 1000, bonus: 200 },
+  points_300: { points: 300, bonus: 50 },
+  points_700: { points: 700, bonus: 150 },
+  points_1500: { points: 1500, bonus: 500 },
+  points_4000: { points: 4000, bonus: 1500 },
 };
 
 // 구독 상품 정보
 const SUBSCRIPTION_PRODUCTS = {
-  premium_monthly: { tier: "premium", durationDays: 30 },
-  premium_yearly: { tier: "premium", durationDays: 365 },
-  max_monthly: { tier: "max", durationDays: 30 },
-  max_yearly: { tier: "max", durationDays: 365 },
+  premiummonthly: { tier: "premium", durationDays: 30 },
+  premiumyearly: { tier: "premium", durationDays: 365 },
+  maxmonthly: { tier: "max", durationDays: 30 },
+  maxyearly: { tier: "max", durationDays: 365 },
 };
 
 /**
@@ -470,8 +470,8 @@ exports.verifyPurchase = onDocumentCreated(
           expiresAt.setDate(expiresAt.getDate() + durationDays);
         }
 
-        // 일일 무료 채팅 충전
-        const dailyFreeChats = isMax ? 3 : 2;
+        // 일일 무료 채팅 충전 (Free/Premium 1회, MAX 3회)
+        const dailyFreeChats = isMax ? 3 : 1;
 
         await db.collection("users").doc(userId).update({
           isPremium: true,

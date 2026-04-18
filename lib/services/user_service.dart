@@ -112,7 +112,7 @@ class UserService {
         'country': country,
         'region': region,
         'profileImageUrl': profileImageUrl ?? '',
-        'points': 100,  // 초기 포인트 지급
+        'points': 0,  // 신규 가입 포인트 없음 (충전 또는 보상으로 획득)
         'receivedRequestCount': 0,
         'isOnline': true,
         'isActive': true,
