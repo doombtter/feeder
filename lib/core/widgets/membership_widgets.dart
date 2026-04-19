@@ -237,11 +237,6 @@ class MembershipBenefits {
     return tier == MembershipTier.max;
   }
 
-  // 프로필 MAX 뱃지 표시 가능 (MAX 전용)
-  static bool canShowMaxBadge(MembershipTier tier) {
-    return tier == MembershipTier.max;
-  }
-
   // 글 작성자 프로필 조회 가능 (MAX 전용)
   static bool canViewAuthorProfile(MembershipTier tier) {
     return tier == MembershipTier.max;

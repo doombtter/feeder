@@ -8,29 +8,29 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 //   true  → 테스트 광고 (개발/QA 중)
 //   false → 실제 광고  (출시 빌드)
 // ════════════════════════════════════════════════════════════════
-const bool _useTestAds = true;
+const bool _useTestAds = false;
 
 // ── Android 광고 단위 ID ──────────────────────────────────────
 const _android = (
   appId: (
     test: 'ca-app-pub-3940256099942544~3347511713',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX', // ← 실제 앱 ID
+    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 앱 ID
   ),
   banner: (
     test: 'ca-app-pub-3940256099942544/6300978111',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 배너 ID
+    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 배너 ID
   ),
   interstitial: (
     test: 'ca-app-pub-3940256099942544/1033173712',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 전면 ID
+    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 전면 ID
   ),
   native: (
     test: 'ca-app-pub-3940256099942544/2247696110',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 네이티브 ID
+    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 네이티브 ID
   ),
   rewarded: (
     test: 'ca-app-pub-3940256099942544/5224354917',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 리워드 ID
+    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 리워드 ID
   ),
 );
 
@@ -38,23 +38,23 @@ const _android = (
 const _ios = (
   appId: (
     test: 'ca-app-pub-3940256099942544~1458002511',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX', // ← 실제 앱 ID
+    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 앱 ID
   ),
   banner: (
     test: 'ca-app-pub-3940256099942544/2934735716',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 배너 ID
+    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 배너 ID
   ),
   interstitial: (
     test: 'ca-app-pub-3940256099942544/4411468910',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 전면 ID
+    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 전면 ID
   ),
   native: (
     test: 'ca-app-pub-3940256099942544/3986624511',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 네이티브 ID
+    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 네이티브 ID
   ),
   rewarded: (
     test: 'ca-app-pub-3940256099942544/1712485313',
-    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 리워드 ID
+    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 리워드 ID
   ),
 );
 

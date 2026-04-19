@@ -22,7 +22,6 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
   bool _isLoading = true;
   int _points = 0;
   int _dailyFreeChats = 0;
-  bool _showMaxBadge = true;
   int _profileViewCount = 0;
 
   @override
@@ -40,7 +39,6 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
         _currentTier = parseMembershipTier(data);
         _points = data['points'] ?? 0;
         _dailyFreeChats = data['dailyFreeChats'] ?? 1;
-        _showMaxBadge = data['showMaxBadge'] ?? true;
         _profileViewCount = data['dailyProfileViewCount'] ?? 0;
         _isLoading = false;
       });
@@ -113,14 +111,6 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
         const SnackBar(content: Text('일일 제한이 리셋되었습니다')),
       );
     }
-  }
-
-  Future<void> _toggleMaxBadge() async {
-    final newValue = !_showMaxBadge;
-    await _firestore.collection('users').doc(_uid).update({
-      'showMaxBadge': newValue,
-    });
-    setState(() => _showMaxBadge = newValue);
   }
 
   void _showCreateGroupChatDialog() {
@@ -496,21 +486,6 @@ class _DevMenuScreenState extends State<DevMenuScreen> {
                     ),
                   ),
                 ]),
-                const SizedBox(height: 24),
-
-                // MAX 뱃지 토글 (MAX 유저만)
-                if (_currentTier == MembershipTier.max)
-                  _buildSection('MAX 설정', [
-                    SwitchListTile(
-                      title: const Text('프로필 MAX 뱃지 표시', 
-                        style: TextStyle(color: AppColors.textPrimary)),
-                      subtitle: const Text('다른 유저에게 MAX 뱃지 노출',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                      value: _showMaxBadge,
-                      onChanged: (_) => _toggleMaxBadge(),
-                      activeColor: MembershipTier.max.color,
-                    ),
-                  ]),
                 const SizedBox(height: 24),
 
                 // 운영자 단톡 관리

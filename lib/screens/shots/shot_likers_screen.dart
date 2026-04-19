@@ -300,25 +300,6 @@ class _UserCard extends StatelessWidget {
                           : _buildDefaultAvatar(genderColor),
                     ),
                   ),
-                  // MAX 뱃지
-                  if (user.isMax && user.showMaxBadge)
-                    Positioned(
-                      right: -2,
-                      bottom: -2,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: MembershipTier.max.color,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.card, width: 2),
-                        ),
-                        child: const Icon(
-                          Icons.diamond_rounded,
-                          size: 10,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(width: 14),

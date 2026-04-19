@@ -432,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return _FeedList(key: _feedKey, isPremium: _isPremium);
       case 1:
-        return ShotsScreen(key: _shotsKey);
+        return _buildShotsWithOverlay();
       case 2:
         return const ChatListScreen();
       case 3:
@@ -440,6 +440,115 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return _FeedList(key: _feedKey, isPremium: _isPremium, membershipTier: _membershipTier);
     }
+  }
+
+  /// Shots 탭: 전체화면 + 반투명 상단 오버레이(멤버십/알림)
+  Widget _buildShotsWithOverlay() {
+    return Stack(
+      children: [
+        ShotsScreen(key: _shotsKey),
+        // 반투명 상단 오버레이
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            ignoring: false,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.5),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      // 멤버십 아이콘
+                      MembershipIcon(
+                        tier: _membershipTier,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const StoreScreen(),
+                            ),
+                          ).then((_) => _loadUserStatus());
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      // 알림 버튼
+                      StreamBuilder<int>(
+                        stream: _notificationService.getUnreadCountStream(_uid),
+                        builder: (context, snapshot) {
+                          final unreadCount = snapshot.data ?? 0;
+                          return Stack(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.notifications_outlined,
+                                    size: 22,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const NotificationsScreen(),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              if (unreadCount > 0)
+                                Positioned(
+                                  right: 4,
+                                  top: 4,
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.black,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

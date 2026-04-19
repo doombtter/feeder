@@ -35,7 +35,6 @@ class UserModel {
   final bool hasClaimedRatingReward;  // 앱 평점 보상 수령 여부
   final bool hasClaimedPolicyReward;  // 앱 정책 확인 보상 수령 여부
   // MAX 전용
-  final bool showMaxBadge;  // MAX 뱃지 표시 여부
   final int dailyProfileViewCount;  // 오늘 사용한 프로필 조회 횟수
   final DateTime? dailyProfileViewResetAt;
 
@@ -70,7 +69,6 @@ class UserModel {
     this.dailyFreeChatsResetAt,
     this.hasClaimedRatingReward = false,
     this.hasClaimedPolicyReward = false,
-    this.showMaxBadge = true,
     this.dailyProfileViewCount = 0,
     this.dailyProfileViewResetAt,
   });
@@ -162,7 +160,6 @@ class UserModel {
       dailyFreeChatsResetAt: (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate(),
       hasClaimedRatingReward: data['hasClaimedRatingReward'] ?? false,
       hasClaimedPolicyReward: data['hasClaimedPolicyReward'] ?? false,
-      showMaxBadge: data['showMaxBadge'] ?? true,
       dailyProfileViewCount: data['dailyProfileViewCount'] ?? 0,
       dailyProfileViewResetAt: (data['dailyProfileViewResetAt'] as Timestamp?)?.toDate(),
     );
@@ -199,7 +196,6 @@ class UserModel {
       'dailyFreeChatsResetAt': dailyFreeChatsResetAt != null ? Timestamp.fromDate(dailyFreeChatsResetAt!) : null,
       'hasClaimedRatingReward': hasClaimedRatingReward,
       'hasClaimedPolicyReward': hasClaimedPolicyReward,
-      'showMaxBadge': showMaxBadge,
       'dailyProfileViewCount': dailyProfileViewCount,
       'dailyProfileViewResetAt': dailyProfileViewResetAt != null ? Timestamp.fromDate(dailyProfileViewResetAt!) : null,
     };

@@ -485,7 +485,7 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 단계 안내
+              // 단계 안내 (1단계 로그인 완료 / 2단계 전화번호 / 3단계 인증번호)
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -495,12 +495,36 @@ class _PhoneLinkScreenState extends State<PhoneLinkScreen> {
                 ),
                 child: Row(
                   children: [
+                    // 1단계: 로그인 (항상 완료 상태로 도달)
                     _StepIndicator(step: 1, isActive: false, isComplete: true),
                     Expanded(child: _StepLine(isActive: true)),
-                    _StepIndicator(step: 2, isActive: true, isComplete: false),
-                    Expanded(child: _StepLine(isActive: false)),
-                    _StepIndicator(step: 3, isActive: false, isComplete: false),
+                    // 2단계: 전화번호 입력 - OTP 보내면 완료
+                    _StepIndicator(
+                      step: 2,
+                      isActive: !_otpSent,
+                      isComplete: _otpSent,
+                    ),
+                    Expanded(child: _StepLine(isActive: _otpSent)),
+                    // 3단계: 인증번호 입력
+                    _StepIndicator(
+                      step: 3,
+                      isActive: _otpSent,
+                      isComplete: false,
+                    ),
                   ],
+                ),
+              ),
+              
+              const SizedBox(height: 10),
+              
+              Center(
+                child: Text(
+                  _otpSent ? '3/3 인증번호 입력' : '2/3 전화번호 입력',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
               

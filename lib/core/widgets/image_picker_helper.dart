@@ -61,8 +61,16 @@ class ImagePickerHelper {
           toolbarColor: AppColors.primary,
           toolbarWidgetColor: Colors.white,
           statusBarColor: AppColors.primary,
-          backgroundColor: Colors.black,
+          backgroundColor: AppColors.background,
           activeControlsWidgetColor: AppColors.primary,
+          // 크롭 프레임 및 격자 스타일
+          dimmedLayerColor: Colors.black.withValues(alpha: 0.6),
+          cropFrameColor: AppColors.primary,
+          cropGridColor: Colors.white.withValues(alpha: 0.4),
+          cropFrameStrokeWidth: 3,
+          cropGridStrokeWidth: 1,
+          showCropGrid: true,
+          // 비율 설정
           initAspectRatio: config.initialRatioPreset,
           lockAspectRatio: config.lockAspectRatio,
           aspectRatioPresets: config.ratioPresets,
@@ -70,11 +78,14 @@ class ImagePickerHelper {
         ),
         IOSUiSettings(
           title: config.toolbarTitle,
+          doneButtonTitle: '완료',
+          cancelButtonTitle: '취소',
           aspectRatioLockEnabled: config.lockAspectRatio,
           aspectRatioPresets: config.ratioPresets,
           resetAspectRatioEnabled: !config.lockAspectRatio,
           aspectRatioPickerButtonHidden: config.lockAspectRatio,
           rotateButtonsHidden: false,
+          resetButtonHidden: false,
         ),
       ],
     );

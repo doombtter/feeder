@@ -22,10 +22,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _suspensionService = SuspensionService();
   final _userService = UserService();
 
-  // MAX 뱃지 관련
-  bool _isMax = false;
-  bool _showMaxBadge = true;
-
   int _versionTapCount = 0;
   DateTime? _lastVersionTap;
 
@@ -36,31 +32,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadUserInfo() async {
-    final user = await _userService.getUser(_uid);
-    if (mounted && user != null) {
-      setState(() {
-        _isMax = user.isMax;
-        _showMaxBadge = user.showMaxBadge;
-      });
-    }
-  }
-
-  Future<void> _toggleMaxBadge(bool value) async {
-    setState(() => _showMaxBadge = value);
-    
-    await _firestore.collection('users').doc(_uid).update({
-      'showMaxBadge': value,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(value ? 'MAX 뱃지가 표시됩니다' : 'MAX 뱃지가 숨겨집니다'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    // 유저 정보 프리페치 (현재 UI에서 사용되는 필드는 없지만
+    // 향후 MAX 전용 섹션이 생길 때를 대비해 훅 남겨둠)
+    await _userService.getUser(_uid);
   }
 
   void _onVersionTap() {
@@ -182,18 +156,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _buildSettingsCard(
             children: [
-              // MAX 뱃지 ON/OFF (MAX 유저만 표시)
-              if (_isMax) ...[
-                _buildSwitchItem(
-                  icon: Icons.workspace_premium_rounded,
-                  iconColor: MembershipTier.max.color,
-                  title: 'MAX 뱃지 표시',
-                  subtitle: '다른 사람들에게 MAX 뱃지 표시',
-                  value: _showMaxBadge,
-                  onChanged: _toggleMaxBadge,
-                ),
-                _buildDivider(),
-              ],
               _buildNavItem(
                 icon: Icons.block_rounded,
                 title: '차단 목록',

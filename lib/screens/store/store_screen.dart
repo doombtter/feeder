@@ -832,6 +832,7 @@ class _StoreScreenState extends State<StoreScreen>
           ),
           const SizedBox(height: 12),
 
+          _buildBenefitItem(Icons.chat_bubble_rounded, '일일 무료 채팅 1회', '매일 무료 채팅 1회 제공'),
           _buildBenefitItem(Icons.videocam_rounded, '채팅 동영상 전송', '일 3회 전송 가능'),
           _buildBenefitItem(Icons.card_giftcard_rounded, '상대방 동영상 권한', '일반 유저에게 권한 3회 부여'),
           _buildBenefitItem(Icons.phone_rounded, '랜덤 전화 +2회', '이성 유저와 랜덤 음성 통화'),
@@ -1220,12 +1221,6 @@ class _StoreScreenState extends State<StoreScreen>
             Icons.favorite_rounded,
             '내 Shot에 좋아요 누른 사람 조회',
             '누가 내 Shot을 좋아했는지 확인',
-            isExclusive: true,
-          ),
-          _buildMaxBenefitItem(
-            Icons.workspace_premium_rounded,
-            '프로필 MAX 뱃지 (ON/OFF)',
-            '다른 유저에게 MAX 뱃지 표시',
             isExclusive: true,
           ),
           _buildMaxBenefitItem(

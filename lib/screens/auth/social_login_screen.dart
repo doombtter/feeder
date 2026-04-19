@@ -235,14 +235,27 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                 ),
               ),
               
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               
               Center(
                 child: Text(
-                  '1단계: 계정 선택',
+                  '계정 선택 → 전화번호 → 인증번호',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textTertiary,
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 4),
+              
+              Center(
+                child: Text(
+                  '1/3 계정 선택',
                   style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
                   ),
                 ),
               ),
