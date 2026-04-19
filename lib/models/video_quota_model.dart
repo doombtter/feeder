@@ -4,16 +4,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class VideoQuotaConstants {
   VideoQuotaConstants._();
 
-  // 프리미엄 유저: 일일 5회 (전체 채팅)
-  static const int premiumDailyLimit = 5;
-  
-  // 일반 유저: 프리미엄과의 채팅에서 일일 3회
+  // 프리미엄 유저: 일일 3회 (전체 채팅)
+  static const int premiumDailyLimit = 3;
+
+  // MAX 유저: 일일 10회 (전체 채팅)
+  static const int maxDailyLimit = 10;
+
+  // 일반 유저: 프리미엄과의 채팅에서 일일 3회 (부여 단위)
   static const int grantedDailyLimit = 3;
-  
+
+  // MAX가 부여하는 경우: 일일 6회 (부여 단위)
+  static const int grantedByMaxDailyLimit = 6;
+
   // 동영상 제한
   static const int maxVideoDurationSec = 180;  // 3분
   static const int maxVideoSizeMB = 100;       // 100MB
-  
+
   // 동영상 보관 기간
   static const int videoRetentionDays = 7;
 }
@@ -67,11 +73,15 @@ class VideoQuotaModel {
     };
   }
 
-  /// 초기 쿼터 생성 (프리미엄 유저용)
-  factory VideoQuotaModel.initial(String userId) {
+  /// 초기 쿼터 생성 (프리미엄/MAX 유저용)
+  /// [dailyLimit]에 VideoQuotaConstants.premiumDailyLimit 또는 maxDailyLimit 전달.
+  factory VideoQuotaModel.initial(
+    String userId, {
+    int dailyLimit = VideoQuotaConstants.premiumDailyLimit,
+  }) {
     return VideoQuotaModel(
       userId: userId,
-      dailyLimit: VideoQuotaConstants.premiumDailyLimit,
+      dailyLimit: dailyLimit,
       usedToday: 0,
       resetAt: DateTime.now(),
     );
@@ -125,6 +135,9 @@ class ChatVideoGrantModel {
   /// 전송 가능 여부
   bool get canSendVideo => remainingToday > 0;
 
+  /// 리셋 필요 여부 (날짜가 바뀌었는지) - 외부 접근용
+  bool get shouldReset => _shouldReset;
+
   /// 리셋 필요 여부
   bool get _shouldReset {
     final now = DateTime.now();
@@ -159,16 +172,19 @@ class ChatVideoGrantModel {
   }
 
   /// 초기 권한 생성
+  /// [dailyLimit]에 VideoQuotaConstants.grantedDailyLimit(Premium) 또는
+  /// grantedByMaxDailyLimit(MAX) 전달.
   factory ChatVideoGrantModel.initial({
     required String chatRoomId,
     required String userId,
     required String grantedBy,
+    int dailyLimit = VideoQuotaConstants.grantedDailyLimit,
   }) {
     return ChatVideoGrantModel(
       chatRoomId: chatRoomId,
       userId: userId,
       grantedBy: grantedBy,
-      dailyLimit: VideoQuotaConstants.grantedDailyLimit,
+      dailyLimit: dailyLimit,
       usedToday: 0,
       resetAt: DateTime.now(),
       createdAt: DateTime.now(),

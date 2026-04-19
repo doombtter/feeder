@@ -242,9 +242,9 @@ async function verifyGooglePlayPurchase(productId, purchaseToken, isSubscription
       if (res.data.purchaseState !== 0) {
         return { valid: false, reason: "purchase_not_completed", data: res.data };
       }
-      if (res.data.consumptionState === 1) {
-        return { valid: false, reason: "already_consumed", data: res.data };
-      }
+      // consumptionState === 1 은 클라이언트가 completePurchase를 이미 호출한 상태.
+      // purchaseState === 0 이면 Google이 정상 결제를 확인해준 것이므로 지급을 진행한다.
+      // 중복 지급 방지는 호출부(verifyPurchase)의 purchaseId 기준 체크가 담당.
 
       return { valid: true, data: res.data };
     }
@@ -814,6 +814,101 @@ exports.claimPolicyReward = onCall(async (request) => {
     console.error("claimPolicyReward error:", error);
     throw new HttpsError("internal", error.message);
   }
+});
+
+/**
+ * 광고 리워드 수령 (출석체크 / 1일 1회)
+ *
+ * 동작:
+ *   - Free 유저: 리워드 광고 시청 완료 후 호출 → 무료 채팅권 +1 지급
+ *   - Premium/MAX 유저: 광고 없이 바로 호출 → 무료 채팅권 +1 지급
+ *
+ * 멱등:
+ *   users/{uid}/adRewards/{YYYY-MM-DD} 문서로 당일 수령 이력 관리.
+ *   같은 날 두 번째 호출은 already-exists 에러.
+ *
+ * 날짜 기준: 서버 시간 KST(UTC+9)로 계산.
+ */
+exports.claimAdReward = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다");
+  }
+
+  const uid = request.auth.uid;
+
+  // KST 기준 오늘 날짜 (YYYY-MM-DD)
+  const now = new Date();
+  const kstOffsetMs = 9 * 60 * 60 * 1000;
+  const kstNow = new Date(now.getTime() + kstOffsetMs);
+  const todayKey = kstNow.toISOString().split("T")[0];
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const userRef = db.collection("users").doc(uid);
+      const rewardRef = userRef.collection("adRewards").doc(todayKey);
+
+      const userDoc = await tx.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "사용자 정보 없음");
+      }
+
+      const rewardDoc = await tx.get(rewardRef);
+      if (rewardDoc.exists) {
+        throw new HttpsError("already-exists", "오늘 이미 수령했습니다");
+      }
+
+      const data = userDoc.data();
+      const isPremium = data.isPremium === true;
+      const isMax = data.isMax === true;
+
+      // 무료 채팅권 +1
+      tx.update(userRef, {
+        dailyFreeChats: FieldValue.increment(1),
+      });
+
+      // 수령 이력 기록
+      tx.set(rewardRef, {
+        claimedAt: Timestamp.now(),
+        type: "ad_reward",
+        reward: "free_chat",
+        amount: 1,
+        tier: isMax ? "max" : isPremium ? "premium" : "free",
+      });
+
+      return { reward: "free_chat", amount: 1 };
+    });
+
+    return { success: true, ...result };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error("claimAdReward error:", error);
+    throw new HttpsError("internal", error.message);
+  }
+});
+
+/**
+ * 광고 리워드 수령 가능 여부 확인 (오늘 이미 받았는지)
+ * 클라이언트가 UI 활성/비활성 판단용으로 호출.
+ */
+exports.canClaimAdReward = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다");
+  }
+
+  const uid = request.auth.uid;
+  const now = new Date();
+  const kstOffsetMs = 9 * 60 * 60 * 1000;
+  const kstNow = new Date(now.getTime() + kstOffsetMs);
+  const todayKey = kstNow.toISOString().split("T")[0];
+
+  const rewardRef = db
+    .collection("users")
+    .doc(uid)
+    .collection("adRewards")
+    .doc(todayKey);
+  const doc = await rewardRef.get();
+
+  return { canClaim: !doc.exists, dateKey: todayKey };
 });
 
 

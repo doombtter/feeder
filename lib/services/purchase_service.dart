@@ -42,7 +42,7 @@ class ProductIds {
     ...consumables,
     ...subscriptions,
   ];
-  
+
   // 테스트용 폴백 가격 (스토어 연결 전 개발용)
   static const Map<String, String> fallbackPrices = {
     points100: '₩1,200',
@@ -96,8 +96,12 @@ class PurchaseService {
   List<ProductDetails> get products => _products;
   bool get isAvailable => _isAvailable;
 
+  bool _initialized = false;
+
   /// 초기화
   Future<void> initialize() async {
+    if (_initialized) return; // ← 추가
+    _initialized = true;
     _isAvailable = await _iap.isAvailable();
     if (!_isAvailable) {
       debugPrint('In-app purchase not available');
@@ -193,7 +197,10 @@ class PurchaseService {
     if (uid == null) return false;
 
     try {
-      await _firestore.collection('purchases').add({
+      await _firestore
+          .collection('purchases')
+          .doc(purchase.purchaseID) // ← 문서 ID로 지정
+          .set({
         'userId': uid,
         'productId': purchase.productID,
         'purchaseId': purchase.purchaseID,
@@ -203,9 +210,10 @@ class PurchaseService {
             ? purchase.verificationData.serverVerificationData
             : purchase.verificationData.serverVerificationData,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: false));
 
-      debugPrint('✅ Purchase submitted for server verification: ${purchase.productID}');
+      debugPrint(
+          '✅ Purchase submitted for server verification: ${purchase.productID}');
       return true;
     } catch (e) {
       debugPrint('❌ Failed to submit purchase for verification: $e');
@@ -261,7 +269,7 @@ class PurchaseService {
     // 스토어 연결 안 됐거나 상품 못 찾으면 폴백 가격 반환
     return ProductIds.fallbackPrices[productId];
   }
-  
+
   /// 스토어가 사용 가능한지 확인 (실제 구매 가능 여부)
   bool canPurchase(String productId) {
     if (!_isAvailable) return false;

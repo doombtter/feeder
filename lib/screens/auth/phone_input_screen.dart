@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../services/auth_service.dart';
 import 'otp_verify_screen.dart';
@@ -18,6 +20,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   final _phoneController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
+
+  static const _termsUrl = 'https://feeder-dc220.web.app/terms.html';
+  static const _privacyUrl = 'https://feeder-dc220.web.app/privacy.html';
 
   @override
   void initState() {
@@ -39,6 +44,19 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       cleaned = cleaned.substring(1);
     }
     return '+82$cleaned';
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('링크를 열 수 없습니다')),
+        );
+      }
+    }
   }
 
   Future<void> _sendOTP() async {
@@ -100,6 +118,39 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     );
   }
 
+  Widget _buildStepIndicator() {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Container(
+          width: 32,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.border,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Text(
+          '1 / 2',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -110,7 +161,10 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 60),
+              const SizedBox(height: 40),
+              // 단계 표시 (1/2)
+              _buildStepIndicator(),
+              const SizedBox(height: 24),
               // 로고
               Container(
                 width: 56,
@@ -250,12 +304,43 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 ),
               ),
               const Spacer(),
+              // 약관/정책 링크
               Center(
-                child: Text(
-                  '계속 진행하면 서비스 이용약관에 동의하게 됩니다.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textTertiary,
+                      height: 1.6,
+                    ),
+                    children: [
+                      const TextSpan(text: '계속 진행하면 '),
+                      TextSpan(
+                        text: '서비스 이용약관',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.primary,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => _launchUrl(_termsUrl),
+                      ),
+                      const TextSpan(text: ' 및 '),
+                      TextSpan(
+                        text: '개인정보 처리방침',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.primary,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => _launchUrl(_privacyUrl),
+                      ),
+                      const TextSpan(text: '에\n동의하게 됩니다.'),
+                    ],
                   ),
                 ),
               ),

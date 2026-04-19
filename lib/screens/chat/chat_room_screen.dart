@@ -343,6 +343,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 isOtherPremium: _isOtherPremium,
                 onVideoTap: _pickAndSendVideo,
                 onEphemeralVideoTap: _pickAndSendEphemeralVideo,
+                onGrantVideoTap: _handleGrantVideoPermission,
               ),
             ],
           ),
@@ -819,6 +820,132 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ],
       ),
     );
+  }
+
+  /// 프리미엄/MAX 유저가 상대(일반 유저)에게 채팅방 동영상 권한 부여
+  Future<void> _handleGrantVideoPermission() async {
+    if (_otherUserId == null || _otherUserId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('상대방 정보를 불러오는 중입니다')),
+      );
+      return;
+    }
+
+    if (_myMembershipTier == MembershipTier.free) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('프리미엄 회원만 권한을 부여할 수 있어요')),
+      );
+      return;
+    }
+
+    // 이미 오늘 부여했는지 사전 체크
+    final canGrant = await _videoService.canGrantVideoPermission(
+      chatRoomId: widget.chatRoomId,
+      targetUserId: _otherUserId!,
+    );
+    if (!canGrant) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('오늘 이미 이 상대에게 권한을 부여했어요')),
+      );
+      return;
+    }
+
+    final limit = MembershipBenefits.getGrantedVideoLimit(_myMembershipTier);
+
+    // 확인 다이얼로그
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.card_giftcard_rounded, color: AppColors.primary),
+            const SizedBox(width: 8),
+            const Text('동영상 권한 부여',
+                style: TextStyle(color: AppColors.textPrimary)),
+          ],
+        ),
+        content: Text(
+          '이 채팅방에서 상대방이 오늘 동영상을 $limit회 전송할 수 있도록 권한을 부여합니다.\n\n'
+          '(한 상대에게 하루 1회만 부여할 수 있어요)',
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소',
+                style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('부여하기',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                )),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final result = await _videoService.grantVideoPermission(
+      chatRoomId: widget.chatRoomId,
+      targetUserId: _otherUserId!,
+    );
+
+    if (!mounted) return;
+
+    switch (result) {
+      case GrantVideoPermissionResult.success:
+        // 채팅방에 안내 메시지 전송
+        await _chatService.sendMessage(
+          chatRoomId: widget.chatRoomId,
+          senderId: _uid,
+          content: '🎁 동영상 전송 권한 $limit회를 부여했어요',
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('상대방에게 동영상 권한 $limit회를 부여했어요'),
+                ),
+              ],
+            ),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+        break;
+      case GrantVideoPermissionResult.alreadyGrantedToday:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('오늘 이미 이 상대에게 권한을 부여했어요')),
+        );
+        break;
+      case GrantVideoPermissionResult.notPremium:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('프리미엄 회원만 권한을 부여할 수 있어요')),
+        );
+        break;
+      case GrantVideoPermissionResult.notSignedIn:
+        break;
+    }
   }
 
   // ── 펑 동영상 전송 로직

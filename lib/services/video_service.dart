@@ -196,18 +196,17 @@ class VideoService {
         return VideoPermissionResult.quotaExceeded();
       }
     } else {
-      // 일반 유저: 상대가 프리미엄/MAX인지 확인
+      // 일반 유저: 상대가 프리미엄/MAX이고, 권한이 실제로 부여됐는지 확인
       if (!isOtherPremium) {
         return VideoPermissionResult.noPermission();
       }
 
-      // 이 채팅방에서의 권한 확인
-      final grant = await _getOrCreateChatGrant(
-        chatRoomId: chatRoomId,
-        userId: uid,
-        grantedBy: otherUserId,
-      );
-      
+      // 이 채팅방의 권한 조회 (없으면 권한 없음)
+      final grant = await _getChatGrantIfExists(chatRoomId, uid);
+      if (grant == null) {
+        return VideoPermissionResult.noPermission();
+      }
+
       if (grant.canSendVideo) {
         return VideoPermissionResult.granted(grant.remainingToday);
       } else {
@@ -263,10 +262,10 @@ class VideoService {
   /// 프리미엄/MAX 유저 쿼터 조회/생성
   Future<VideoQuotaModel> _getOrCreatePremiumQuota(String userId, MembershipTier tier) async {
     final doc = await _firestore.collection('videoQuotas').doc(userId).get();
-    
+
     if (doc.exists) {
       var quota = VideoQuotaModel.fromFirestore(doc);
-      // 등급에 따른 일일 한도 업데이트
+      // 등급에 따른 일일 한도 업데이트 (Premium 3 / MAX 10)
       final dailyLimit = MembershipBenefits.getDailyVideoLimit(tier);
       if (quota.dailyLimit != dailyLimit) {
         quota = VideoQuotaModel(
@@ -275,6 +274,11 @@ class VideoService {
           usedToday: quota.usedToday,
           resetAt: quota.resetAt,
         );
+        // DB에도 최신 한도 저장 (과거 저장된 5 등을 정리)
+        await _firestore
+            .collection('videoQuotas')
+            .doc(userId)
+            .set(quota.toFirestore());
       }
       return quota;
     } else {
@@ -293,29 +297,87 @@ class VideoService {
     }
   }
 
-  /// 채팅방 권한 조회/생성
-  Future<ChatVideoGrantModel> _getOrCreateChatGrant({
-    required String chatRoomId,
-    required String userId,
-    required String grantedBy,
-  }) async {
+  /// 채팅방 권한 조회 (없으면 null)
+  Future<ChatVideoGrantModel?> _getChatGrantIfExists(
+    String chatRoomId,
+    String userId,
+  ) async {
     final grantId = '${chatRoomId}_$userId';
-    final doc = await _firestore.collection('chatVideoGrants').doc(grantId).get();
-    
-    if (doc.exists) {
-      return ChatVideoGrantModel.fromFirestore(doc);
-    } else {
-      final grant = ChatVideoGrantModel.initial(
-        chatRoomId: chatRoomId,
-        userId: userId,
-        grantedBy: grantedBy,
-      );
-      await _firestore
-          .collection('chatVideoGrants')
-          .doc(grantId)
-          .set(grant.toFirestore());
-      return grant;
+    final doc =
+        await _firestore.collection('chatVideoGrants').doc(grantId).get();
+    if (!doc.exists) return null;
+    return ChatVideoGrantModel.fromFirestore(doc);
+  }
+
+  /// 프리미엄/MAX 유저가 상대방(일반 유저)에게 이 채팅방에서 동영상 전송 권한을 부여
+  ///
+  /// 규칙:
+  ///   - 호출자가 Premium/MAX 유저여야 함
+  ///   - 같은 채팅방의 상대에게 **하루 1회**만 부여 가능
+  ///     (이미 오늘 부여한 권한이 남아있거나 당일 부여 이력이 있으면 거부)
+  ///
+  /// 반환: 성공 시 [GrantVideoPermissionResult.success], 실패 시 해당 사유
+  Future<GrantVideoPermissionResult> grantVideoPermission({
+    required String chatRoomId,
+    required String targetUserId,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return GrantVideoPermissionResult.notSignedIn;
+
+    // 호출자 등급 확인
+    final myDoc = await _firestore.collection('users').doc(uid).get();
+    final myTier = parseMembershipTier(myDoc.data());
+    if (myTier == MembershipTier.free) {
+      return GrantVideoPermissionResult.notPremium;
     }
+
+    final dailyLimit = MembershipBenefits.getGrantedVideoLimit(myTier);
+    if (dailyLimit <= 0) {
+      return GrantVideoPermissionResult.notPremium;
+    }
+
+    final grantId = '${chatRoomId}_$targetUserId';
+    final grantRef = _firestore.collection('chatVideoGrants').doc(grantId);
+    final existingDoc = await grantRef.get();
+
+    // 이미 오늘 부여한 권한이 남아있으면 차단
+    if (existingDoc.exists) {
+      final existing = ChatVideoGrantModel.fromFirestore(existingDoc);
+      if (!existing.shouldReset) {
+        // 오늘 이미 부여했고 아직 리셋 안 됨
+        return GrantVideoPermissionResult.alreadyGrantedToday;
+      }
+      // 날짜가 바뀌었으면 덮어쓰기 허용
+    }
+
+    final grant = ChatVideoGrantModel.initial(
+      chatRoomId: chatRoomId,
+      userId: targetUserId,
+      grantedBy: uid,
+      dailyLimit: dailyLimit,
+    );
+    await grantRef.set(grant.toFirestore());
+    return GrantVideoPermissionResult.success;
+  }
+
+  /// 오늘 해당 채팅방 상대에게 권한을 부여할 수 있는지 체크
+  /// (버튼 활성/비활성 UI에 사용)
+  Future<bool> canGrantVideoPermission({
+    required String chatRoomId,
+    required String targetUserId,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+
+    final myDoc = await _firestore.collection('users').doc(uid).get();
+    final myTier = parseMembershipTier(myDoc.data());
+    if (myTier == MembershipTier.free) return false;
+
+    final grant = await _getChatGrantIfExists(chatRoomId, targetUserId);
+    if (grant == null) return true;
+
+    // 오늘 이미 부여한 권한이 있으면 불가
+    return grant.shouldReset;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -482,4 +544,19 @@ class VideoService {
       debugPrint('캐시 삭제 에러: $e');
     }
   }
+}
+
+/// grantVideoPermission 호출 결과
+enum GrantVideoPermissionResult {
+  /// 권한 부여 성공
+  success,
+
+  /// 로그인되어 있지 않음
+  notSignedIn,
+
+  /// 호출자가 프리미엄/MAX가 아님
+  notPremium,
+
+  /// 오늘 이미 이 상대에게 권한을 부여함
+  alreadyGrantedToday,
 }

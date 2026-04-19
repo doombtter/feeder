@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/membership_widgets.dart';
 import '../../models/user_model.dart';
+import '../../services/ad_reward_service.dart';
 import '../../services/user_service.dart';
 import 'profile_edit_screen.dart';
 import 'my_posts_screen.dart';
@@ -68,6 +70,10 @@ class MyProfileScreen extends StatelessWidget {
               
               // 프로필 헤더 카드
               _buildProfileHeader(context, user),
+              const SizedBox(height: 12),
+
+              // 출석체크(광고 리워드) 카드
+              AttendanceRewardCard(user: user),
               const SizedBox(height: 12),
 
               // 포인트 & 통계 카드
@@ -153,7 +159,7 @@ class MyProfileScreen extends StatelessWidget {
   Widget _buildProfileHeader(BuildContext context, UserModel user) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
@@ -163,7 +169,7 @@ class MyProfileScreen extends StatelessWidget {
         children: [
           // 프로필 이미지
           _buildProfileImage(user),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
           // 닉네임 + 온라인 상태
           Row(
@@ -172,7 +178,7 @@ class MyProfileScreen extends StatelessWidget {
               Text(
                 user.nickname,
                 style: const TextStyle(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
@@ -307,8 +313,8 @@ class MyProfileScreen extends StatelessWidget {
     final hasImage = user.profileImageUrls.isNotEmpty;
     
     return Container(
-      width: 88,
-      height: 88,
+      width: 72,
+      height: 72,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
@@ -325,28 +331,28 @@ class MyProfileScreen extends StatelessWidget {
           shape: BoxShape.circle,
           color: AppColors.card,
         ),
-        padding: const EdgeInsets.all(3),
+        padding: const EdgeInsets.all(2),
         child: hasImage
             ? CachedNetworkImage(
                 imageUrl: user.profileImageUrls[0],
                 imageBuilder: (context, imageProvider) => CircleAvatar(
-                  radius: 40,
+                  radius: 32,
                   backgroundImage: imageProvider,
                 ),
                 placeholder: (context, url) => const CircleAvatar(
-                  radius: 40,
+                  radius: 32,
                   backgroundColor: AppColors.cardLight,
                 ),
                 errorWidget: (context, url, error) => const CircleAvatar(
-                  radius: 40,
+                  radius: 32,
                   backgroundColor: AppColors.cardLight,
-                  child: Icon(Icons.person, size: 40, color: AppColors.textTertiary),
+                  child: Icon(Icons.person, size: 32, color: AppColors.textTertiary),
                 ),
               )
             : const CircleAvatar(
-                radius: 40,
+                radius: 32,
                 backgroundColor: AppColors.cardLight,
-                child: Icon(Icons.person, size: 40, color: AppColors.textTertiary),
+                child: Icon(Icons.person, size: 32, color: AppColors.textTertiary),
               ),
       ),
     );
@@ -703,6 +709,251 @@ class _MenuListItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 출석체크 (광고 리워드) 카드
+///
+/// - Free 유저: 광고 시청 → 무료 채팅권 +1
+/// - Premium/MAX 유저: 광고 없이 바로 무료 채팅권 +1
+/// - 하루 1회 제한 (서버 멱등 체크)
+class AttendanceRewardCard extends StatefulWidget {
+  final UserModel user;
+
+  const AttendanceRewardCard({super.key, required this.user});
+
+  @override
+  State<AttendanceRewardCard> createState() => _AttendanceRewardCardState();
+}
+
+class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
+  final _service = AdRewardService();
+  bool _loading = true;
+  bool _canClaim = false;
+  bool _claiming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  MembershipTier get _tier {
+    if (widget.user.isMax) return MembershipTier.max;
+    if (widget.user.isPremium) return MembershipTier.premium;
+    return MembershipTier.free;
+  }
+
+  Future<void> _checkStatus() async {
+    final can = await _service.canClaimToday();
+    if (!mounted) return;
+    setState(() {
+      _canClaim = can;
+      _loading = false;
+    });
+  }
+
+  Future<void> _handleClaim() async {
+    if (_claiming || !_canClaim) return;
+
+    setState(() => _claiming = true);
+
+    final result = await _service.claimReward(tier: _tier);
+
+    if (!mounted) return;
+    setState(() => _claiming = false);
+
+    switch (result) {
+      case AdRewardResult.success:
+        setState(() => _canClaim = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 10),
+                Expanded(child: Text('무료 채팅권 1장이 지급되었어요 🎁')),
+              ],
+            ),
+            backgroundColor: AppColors.primary,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        break;
+      case AdRewardResult.alreadyClaimedToday:
+        setState(() => _canClaim = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('오늘 이미 수령했어요')),
+        );
+        break;
+      case AdRewardResult.adLoadFailed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('광고를 불러오지 못했어요. 잠시 후 다시 시도해주세요')),
+        );
+        break;
+      case AdRewardResult.adNotCompleted:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('광고를 끝까지 시청해야 지급돼요')),
+        );
+        break;
+      case AdRewardResult.notSignedIn:
+      case AdRewardResult.error:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('처리 중 오류가 발생했어요')),
+        );
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isFree = _tier == MembershipTier.free;
+    final buttonLabel = _claiming
+        ? '처리 중...'
+        : !_canClaim
+            ? '내일 다시 도전!'
+            : isFree
+                ? '광고 보고 받기'
+                : '출석체크 받기';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFFB300).withValues(alpha: 0.15),
+            const Color(0xFFFF8F00).withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFFFB300).withValues(alpha: 0.3),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          // 아이콘
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFB300).withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.card_giftcard_rounded,
+              color: Color(0xFFFF8F00),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 문구
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      '출석체크',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFB300).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text(
+                        '1일 1회',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFF8F00),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isFree
+                      ? '광고 시청 시 무료 채팅권 1장 지급'
+                      : '버튼 한 번으로 무료 채팅권 1장 지급',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 버튼
+          _loading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFFF8F00),
+                  ),
+                )
+              : GestureDetector(
+                  onTap: (_canClaim && !_claiming) ? _handleClaim : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _canClaim
+                          ? const Color(0xFFFF8F00)
+                          : AppColors.textTertiary.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: _canClaim
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFFFF8F00).withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: _claiming
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            buttonLabel,
+                            style: TextStyle(
+                              color: _canClaim
+                                  ? Colors.white
+                                  : AppColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                  ),
+                ),
+        ],
       ),
     );
   }

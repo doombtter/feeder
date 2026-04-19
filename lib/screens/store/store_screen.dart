@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,6 +33,13 @@ class _StoreScreenState extends State<StoreScreen>
   bool _hasClaimedRatingReward = false;
   bool _hasClaimedPolicyReward = false;
 
+  // 지급 완료 스낵바 표시용 - 이전 값과 비교해 변화 감지
+  int? _prevPoints;
+  MembershipTier? _prevTier;
+  bool _awaitingGrant = false; // 결제 진행 중 여부
+
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
+
   @override
   void initState() {
     super.initState();
@@ -41,43 +49,117 @@ class _StoreScreenState extends State<StoreScreen>
 
   Future<void> _initStore() async {
     await _purchaseService.initialize();
-    await _loadUserData();
-    setState(() => _isLoading = false);
+    _subscribeToUser();
   }
 
-  Future<void> _loadUserData() async {
-    final doc = await _firestore.collection('users').doc(_uid).get();
-
-    if (doc.exists) {
+  /// users/{uid} 문서를 실시간 구독.
+  /// Cloud Functions가 포인트/구독을 업데이트하면 즉시 화면에 반영됨.
+  void _subscribeToUser() {
+    _userSub?.cancel();
+    _userSub = _firestore
+        .collection('users')
+        .doc(_uid)
+        .snapshots()
+        .listen((doc) async {
+      if (!doc.exists || !mounted) return;
       final data = doc.data()!;
       final tier = parseMembershipTier(data);
-      
+      final newPoints = (data['points'] ?? 0) as int;
+
       // 일일 무료 채팅 리셋 체크
       int dailyFreeChats = data['dailyFreeChats'] ?? 1;
       final resetAt = (data['dailyFreeChatsResetAt'] as Timestamp?)?.toDate();
-      
+
       if (resetAt != null) {
         final now = DateTime.now();
         final resetDate = DateTime(resetAt.year, resetAt.month, resetAt.day);
         final today = DateTime(now.year, now.month, now.day);
-        
+
         if (today.isAfter(resetDate)) {
           dailyFreeChats = MembershipBenefits.getDailyFreeChats(tier);
           await _firestore.collection('users').doc(_uid).update({
             'dailyFreeChats': dailyFreeChats,
             'dailyFreeChatsResetAt': Timestamp.fromDate(now),
           });
+          return; // 업데이트로 인한 다음 스냅샷에서 setState 처리됨
+        }
+      }
+
+      // 지급 완료 감지 → 스낵바 (최초 로드 시에는 띄우지 않음)
+      if (_prevPoints != null && _prevTier != null) {
+        final pointsDelta = newPoints - _prevPoints!;
+        final tierChanged = tier != _prevTier && tier != MembershipTier.free;
+
+        if (pointsDelta > 0 && _awaitingGrant) {
+          _awaitingGrant = false;
+          _showGrantSnackBar('포인트 $pointsDelta P가 충전되었어요 ✨');
+        } else if (tierChanged && _awaitingGrant) {
+          _awaitingGrant = false;
+          final label = tier == MembershipTier.max ? 'MAX' : '프리미엄';
+          _showGrantSnackBar('$label 구독이 활성화되었어요 🎉');
         }
       }
 
       setState(() {
-        _currentPoints = data['points'] ?? 0;
+        _currentPoints = newPoints;
         _membershipTier = tier;
         _dailyFreeChats = dailyFreeChats;
         _hasClaimedRatingReward = data['hasClaimedRatingReward'] ?? false;
         _hasClaimedPolicyReward = data['hasClaimedPolicyReward'] ?? false;
+        _isLoading = false;
+        _prevPoints = newPoints;
+        _prevTier = tier;
       });
-    }
+    }, onError: (e) {
+      debugPrint('user snapshot error: $e');
+      if (mounted) setState(() => _isLoading = false);
+    });
+  }
+
+  void _showGrantSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+  }
+
+  Future<void> _loadUserData() async {
+    // 수동 새로고침용 - 대부분은 스냅샷 리스너가 자동 반영.
+    final doc = await _firestore.collection('users').doc(_uid).get();
+    if (!doc.exists || !mounted) return;
+    final data = doc.data()!;
+    setState(() {
+      _currentPoints = data['points'] ?? 0;
+      _membershipTier = parseMembershipTier(data);
+      _dailyFreeChats = data['dailyFreeChats'] ?? 1;
+      _hasClaimedRatingReward = data['hasClaimedRatingReward'] ?? false;
+      _hasClaimedPolicyReward = data['hasClaimedPolicyReward'] ?? false;
+    });
   }
 
   Future<void> _purchase(ProductDetails product) async {
@@ -85,33 +167,63 @@ class _StoreScreenState extends State<StoreScreen>
 
     final success = await _purchaseService.purchase(product);
 
-    if (!success && mounted) {
+    if (!mounted) return;
+
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('구매를 시작할 수 없습니다')),
       );
+      setState(() => _isPurchasing = false);
+      return;
     }
 
-    await Future.delayed(const Duration(seconds: 2));
-    await _loadUserData();
+    // 결제창 제출 직후 안내. 실제 지급은 서버 검증 후 스냅샷 리스너가 감지.
+    _awaitingGrant = true;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: const [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(child: Text('결제 확인 중입니다. 잠시만 기다려주세요')),
+            ],
+          ),
+          backgroundColor: AppColors.card,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        ),
+      );
 
+    // 서버 검증 완료 시점은 비결정적이므로 스냅샷 리스너가 자동 반영.
+    // 버튼 로딩 상태만 해제.
     setState(() => _isPurchasing = false);
   }
 
   Future<void> _restorePurchases() async {
     setState(() => _isPurchasing = true);
 
+    _awaitingGrant = true;
     await _purchaseService.restorePurchases();
-
-    await Future.delayed(const Duration(seconds: 2));
-    await _loadUserData();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('구매 내역을 복원했습니다')),
       );
+      setState(() => _isPurchasing = false);
     }
-
-    setState(() => _isPurchasing = false);
   }
 
   // 앱 스토어 평점 페이지 열기
@@ -233,6 +345,7 @@ class _StoreScreenState extends State<StoreScreen>
 
   @override
   void dispose() {
+    _userSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -719,8 +832,7 @@ class _StoreScreenState extends State<StoreScreen>
           ),
           const SizedBox(height: 12),
 
-          _buildBenefitItem(Icons.chat_bubble_rounded, '일일 무료 채팅 2회', '매일 무료 채팅 2회 제공'),
-          _buildBenefitItem(Icons.videocam_rounded, '채팅 동영상 전송', '일 5회 전송 가능'),
+          _buildBenefitItem(Icons.videocam_rounded, '채팅 동영상 전송', '일 3회 전송 가능'),
           _buildBenefitItem(Icons.card_giftcard_rounded, '상대방 동영상 권한', '일반 유저에게 권한 3회 부여'),
           _buildBenefitItem(Icons.phone_rounded, '랜덤 전화 +2회', '이성 유저와 랜덤 음성 통화'),
           _buildBenefitItem(Icons.people_rounded, '접속 유저 성별 필터', '접속 중인 사람들을 성별로 필터링'),
@@ -1086,7 +1198,7 @@ class _StoreScreenState extends State<StoreScreen>
           _buildMaxBenefitItem(
             Icons.videocam_rounded,
             '동영상 전송 일 10회',
-            '프리미엄 5회 → MAX 10회',
+            '프리미엄 3회 → MAX 10회',
           ),
           _buildMaxBenefitItem(
             Icons.card_giftcard_rounded,

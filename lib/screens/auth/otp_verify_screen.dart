@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_constants.dart';
@@ -19,6 +21,8 @@ class OTPVerifyScreen extends StatefulWidget {
 }
 
 class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
+  static const int _expiryDuration = 180; // 3분
+
   final _otpControllers = List.generate(6, (_) => TextEditingController());
   final _focusNodes = List.generate(6, (_) => FocusNode());
   final _authService = AuthService();
@@ -26,16 +30,22 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
   bool _isLoading = false;
   bool _isResending = false;
   int _resendCooldown = 0;
+  int _expiryRemaining = _expiryDuration;
+  Timer? _expiryTimer;
+  Timer? _cooldownTimer;
   String _currentVerificationId = '';
 
   @override
   void initState() {
     super.initState();
     _currentVerificationId = widget.verificationId;
+    _startExpiryTimer();
   }
 
   @override
   void dispose() {
+    _expiryTimer?.cancel();
+    _cooldownTimer?.cancel();
     for (final c in _otpControllers) {
       c.dispose();
     }
@@ -47,7 +57,38 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
 
   String get _otp => _otpControllers.map((c) => c.text).join();
 
+  void _startExpiryTimer() {
+    _expiryTimer?.cancel();
+    setState(() => _expiryRemaining = _expiryDuration);
+    _expiryTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _expiryRemaining--;
+        if (_expiryRemaining <= 0) {
+          timer.cancel();
+        }
+      });
+    });
+  }
+
+  String _formatExpiry(int seconds) {
+    final safeSeconds = seconds < 0 ? 0 : seconds;
+    final m = (safeSeconds ~/ 60).toString();
+    final s = (safeSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   Future<void> _verifyOTP() async {
+    if (_expiryRemaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('인증번호가 만료되었습니다. 다시 받아주세요')),
+      );
+      return;
+    }
+
     if (_otp.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('인증번호 6자리를 입력해주세요')),
@@ -59,8 +100,9 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
 
     try {
       // 1. 먼저 정지/탈퇴 여부 체크
-      final blockReason = await _suspensionService.checkLoginEligibility(widget.phoneNumber);
-      
+      final blockReason =
+          await _suspensionService.checkLoginEligibility(widget.phoneNumber);
+
       if (blockReason != null) {
         setState(() => _isLoading = false);
         if (mounted) {
@@ -75,7 +117,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
         otp: _otp,
       );
       debugPrint('🔐 Login success! UID: ${result.user?.uid}');
-      
+
       // 로그인 성공 - 인증 화면들을 모두 pop하고 AuthWrapper가 처리하도록 함
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
@@ -145,8 +187,44 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
     }
   }
 
+  Widget _buildStepIndicator() {
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Container(
+          width: 32,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Text(
+          '2 / 2',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final expired = _expiryRemaining <= 0;
+    final warning = !expired && _expiryRemaining <= 30;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -175,13 +253,16 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 8),
+              // 단계 표시 (2/2)
+              _buildStepIndicator(),
               const SizedBox(height: 20),
               // 아이콘
               Container(
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha:0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Icon(
@@ -225,6 +306,7 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                         textAlign: TextAlign.center,
                         keyboardType: TextInputType.number,
                         maxLength: 1,
+                        enabled: !expired,
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -260,25 +342,63 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                   );
                 }),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
+              // 만료 카운트다운
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      expired
+                          ? Icons.error_outline_rounded
+                          : Icons.timer_outlined,
+                      size: 16,
+                      color: expired
+                          ? AppColors.error
+                          : (warning
+                              ? AppColors.error
+                              : AppColors.textSecondary),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      expired
+                          ? '인증번호가 만료되었습니다'
+                          : '남은 시간 ${_formatExpiry(_expiryRemaining)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: expired
+                            ? AppColors.error
+                            : (warning
+                                ? AppColors.error
+                                : AppColors.textSecondary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               // 인증 버튼
               SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
+                    gradient: expired ? null : AppColors.primaryGradient,
+                    color: expired ? AppColors.card : null,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha:0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: expired
+                        ? null
+                        : [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                   ),
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _verifyOTP,
+                    onPressed: (_isLoading || expired) ? null : _verifyOTP,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
@@ -295,12 +415,14 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                               strokeWidth: 2,
                             ),
                           )
-                        : const Text(
+                        : Text(
                             '확인',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                              color: expired
+                                  ? AppColors.textTertiary
+                                  : Colors.white,
                             ),
                           ),
                   ),
@@ -327,7 +449,8 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
                           style: TextStyle(
                             color: _resendCooldown > 0
                                 ? AppColors.textTertiary
-                                : AppColors.textSecondary,
+                                : AppColors.primary,
+                            fontWeight: FontWeight.w600,
                             fontSize: 14,
                           ),
                         ),
@@ -371,7 +494,8 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
           _resendCooldown = 60;
         });
         _startCooldownTimer();
-        
+        _startExpiryTimer(); // 만료 타이머 재시작
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('인증번호를 다시 전송했습니다')),
@@ -405,11 +529,18 @@ class _OTPVerifyScreenState extends State<OTPVerifyScreen> {
   }
 
   void _startCooldownTimer() {
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted) return false;
-      setState(() => _resendCooldown--);
-      return _resendCooldown > 0;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _resendCooldown--;
+        if (_resendCooldown <= 0) {
+          timer.cancel();
+        }
+      });
     });
   }
 }

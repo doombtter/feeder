@@ -28,6 +28,10 @@ const _android = (
     test: 'ca-app-pub-3940256099942544/2247696110',
     prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 네이티브 ID
   ),
+  rewarded: (
+    test: 'ca-app-pub-3940256099942544/5224354917',
+    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 리워드 ID
+  ),
 );
 
 // ── iOS 광고 단위 ID ──────────────────────────────────────────
@@ -48,6 +52,10 @@ const _ios = (
     test: 'ca-app-pub-3940256099942544/3986624511',
     prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 네이티브 ID
   ),
+  rewarded: (
+    test: 'ca-app-pub-3940256099942544/1712485313',
+    prod: 'ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX', // ← 실제 리워드 ID
+  ),
 );
 
 // ════════════════════════════════════════════════════════════════
@@ -65,6 +73,11 @@ class AdMobService {
 
   static String get _nativeAdUnitId {
     final ids = Platform.isAndroid ? _android.native : _ios.native;
+    return _useTestAds ? ids.test : ids.prod;
+  }
+
+  static String get _rewardedAdUnitId {
+    final ids = Platform.isAndroid ? _android.rewarded : _ios.rewarded;
     return _useTestAds ? ids.test : ids.prod;
   }
 
@@ -126,5 +139,53 @@ class AdMobService {
       request: const AdRequest(),
       nativeTemplateStyle: templateStyle,
     );
+  }
+
+  // ── 리워드 광고 ──────────────────────────────────────────────
+  /// 리워드 광고 로드
+  static Future<RewardedAd?> loadRewardedAd() async {
+    final completer = Completer<RewardedAd?>();
+    RewardedAd.load(
+      adUnitId: _rewardedAdUnitId,
+      request: const AdRequest(),
+      rewardedAdLoadCallback: RewardedAdLoadCallback(
+        onAdLoaded: (ad) => completer.complete(ad),
+        onAdFailedToLoad: (error) {
+          debugPrint('리워드 광고 로드 실패: $error');
+          completer.complete(null);
+        },
+      ),
+    );
+    return completer.future;
+  }
+
+  /// 리워드 광고 표시 + 시청 완료 대기
+  ///
+  /// 반환값:
+  ///   - true: 유저가 끝까지 시청하여 리워드 획득
+  ///   - false: 중도 이탈/에러 등으로 리워드 미획득
+  ///
+  /// 광고 객체는 내부에서 dispose 처리됨.
+  static Future<bool> showRewardedAd(RewardedAd ad) async {
+    final completer = Completer<bool>();
+    bool earned = false;
+
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        if (!completer.isCompleted) completer.complete(earned);
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        debugPrint('리워드 광고 표시 실패: $error');
+        ad.dispose();
+        if (!completer.isCompleted) completer.complete(false);
+      },
+    );
+
+    ad.show(onUserEarnedReward: (ad, reward) {
+      earned = true;
+    });
+
+    return completer.future;
   }
 }

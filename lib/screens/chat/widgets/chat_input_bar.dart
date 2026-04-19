@@ -25,6 +25,7 @@ class ChatInputBar extends StatefulWidget {
   final bool isOtherPremium;
   final VoidCallback? onVideoTap;
   final Future<void> Function(bool isEphemeral)? onEphemeralVideoTap;
+  final VoidCallback? onGrantVideoTap;
 
   const ChatInputBar({
     super.key,
@@ -34,6 +35,7 @@ class ChatInputBar extends StatefulWidget {
     required this.isOtherPremium,
     this.onVideoTap,
     this.onEphemeralVideoTap,
+    this.onGrantVideoTap,
   });
 
   @override
@@ -310,7 +312,9 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
 
   Widget _buildMediaMenu() {
     final canSendVideo = widget.myMembershipTier != MembershipTier.free || widget.isOtherPremium;
-    
+    // 나는 프리미엄/MAX이고 상대가 일반 유저일 때만 권한 부여 버튼 표시
+    final canGrantVideo = widget.myMembershipTier != MembershipTier.free && !widget.isOtherPremium;
+
     return FadeTransition(
       opacity: _menuAnimation,
       child: SlideTransition(
@@ -361,6 +365,17 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
                 color: AppColors.primary,
                 onTap: _startRecording,
               ),
+              if (canGrantVideo)
+                _MediaMenuItem(
+                  icon: Icons.card_giftcard_rounded,
+                  label: '영상권한',
+                  color: const Color(0xFFFFB300),
+                  secondaryIcon: Icons.videocam_rounded,
+                  onTap: () {
+                    _closeMediaMenu();
+                    widget.onGrantVideoTap?.call();
+                  },
+                ),
             ],
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/constants/app_constants.dart';
 import '../models/chat_request_model.dart';
 import '../models/chat_room_model.dart';
 import '../models/message_model.dart';
@@ -15,7 +16,8 @@ class ChatService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
 
-  static const int chatRequestCost = 100; // 채팅 신청 비용
+  /// 채팅 신청 비용 (P). AppConstants.chatRequestCost를 참조.
+  static int get chatRequestCost => AppConstants.chatRequestCost;
 
   // ========== 일일 무료 채팅 ==========
 
