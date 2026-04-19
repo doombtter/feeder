@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/image_picker_helper.dart';
 import '../../../core/widgets/voice/voice.dart';
 import '../../../core/widgets/membership_widgets.dart';
 import '../../../services/s3_service.dart';
@@ -178,21 +178,16 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
 
   Future<void> _pickAndSendImage({bool isEphemeral = false}) async {
     _closeMediaMenu();
-    
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 70,
-    );
 
-    if (pickedFile == null) return;
+    final file = await ImagePickerHelper.pickAndCrop(
+      context,
+      preset: ImageCropPreset.chat,
+    );
+    if (file == null) return;
 
     setState(() => _isSending = true);
 
     try {
-      final file = File(pickedFile.path);
       final imageUrl = await S3Service.uploadChatImage(file, chatRoomId: widget.chatRoomId);
 
       if (imageUrl == null) throw Exception('이미지 업로드 실패');

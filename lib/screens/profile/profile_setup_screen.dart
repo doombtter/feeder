@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/country_codes.dart';
+import '../../core/widgets/image_picker_helper.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -136,18 +136,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 80,
+    final file = await ImagePickerHelper.pickAndCrop(
+      context,
+      preset: ImageCropPreset.profile,
     );
-
-    if (pickedFile != null) {
-      setState(() {
-        _profileImage = File(pickedFile.path);
-      });
+    if (file != null && mounted) {
+      setState(() => _profileImage = file);
     }
   }
 

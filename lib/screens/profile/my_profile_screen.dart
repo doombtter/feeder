@@ -20,10 +20,10 @@ class MyProfileScreen extends StatelessWidget {
   String _getSuspensionRemainingText(UserModel user) {
     if (!user.isSuspended) return '';
     if (user.suspensionExpiresAt == null) return '영구 정지';
-    
+
     final remaining = user.suspensionExpiresAt!.difference(DateTime.now());
     if (remaining.isNegative) return '정지 해제 처리 중...';
-    
+
     if (remaining.inDays > 0) {
       return '${remaining.inDays}일 ${remaining.inHours % 24}시간 후 해제';
     } else if (remaining.inHours > 0) {
@@ -67,7 +67,7 @@ class MyProfileScreen extends StatelessWidget {
                 _buildSuspensionBanner(user),
                 const SizedBox(height: 12),
               ],
-              
+
               // 프로필 헤더 카드
               _buildProfileHeader(context, user),
               const SizedBox(height: 12),
@@ -82,10 +82,6 @@ class MyProfileScreen extends StatelessWidget {
 
               // 퀵 메뉴 그리드
               _buildQuickMenu(context, user),
-              const SizedBox(height: 12),
-
-              // 메뉴 리스트
-              _buildMenuList(context, user),
             ],
           ),
         );
@@ -99,9 +95,9 @@ class MyProfileScreen extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha:0.1),
+        color: AppColors.error.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.error.withValues(alpha:0.3)),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -109,10 +105,11 @@ class MyProfileScreen extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha:0.2),
+              color: AppColors.error.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.block_rounded, color: AppColors.error, size: 24),
+            child: const Icon(Icons.block_rounded,
+                color: AppColors.error, size: 24),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -131,11 +128,12 @@ class MyProfileScreen extends StatelessWidget {
                 Text(
                   _getSuspensionRemainingText(user),
                   style: TextStyle(
-                    color: AppColors.error.withValues(alpha:0.8),
+                    color: AppColors.error.withValues(alpha: 0.8),
                     fontSize: 13,
                   ),
                 ),
-                if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty) ...[
+                if (user.suspensionReason != null &&
+                    user.suspensionReason!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     '사유: ${user.suspensionReason}',
@@ -157,170 +155,217 @@ class MyProfileScreen extends StatelessWidget {
 
   // 프로필 헤더
   Widget _buildProfileHeader(BuildContext context, UserModel user) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
-      ),
-      child: Column(
-        children: [
-          // 프로필 이미지
-          _buildProfileImage(user),
-          const SizedBox(height: 12),
-
-          // 닉네임 + 온라인 상태
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: AppColors.border.withValues(alpha: 0.5), width: 0.5),
+          ),
+          child: Column(
             children: [
-              Text(
-                user.nickname,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: user.isOnline ? AppColors.success : AppColors.textTertiary,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
+              // 프로필 이미지
+              _buildProfileImage(user),
+              const SizedBox(height: 12),
 
-          // 성별, 나이, 지역
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: user.gender == 'male' ? AppColors.male : AppColors.female,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    '${user.gender == 'male' ? '남' : '여'} · ${user.age}세 · ${user.displayLocation}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // 자기소개
-          if (user.bio.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              user.bio,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-
-          // 프로필 수정 버튼 또는 정지 해제 카운트다운
-          if (user.isSuspended)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha:0.1),
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: AppColors.error.withValues(alpha:0.3)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              // 닉네임 + 온라인 상태
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.timer_outlined, size: 16, color: AppColors.error),
-                  const SizedBox(width: 6),
                   Text(
-                    _getSuspensionRemainingText(user),
-                    style: TextStyle(
-                      color: AppColors.error,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+                    user.nickname,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: user.isOnline
+                          ? AppColors.success
+                          : AppColors.textTertiary,
+                      shape: BoxShape.circle,
                     ),
                   ),
                 ],
               ),
-            )
-          else
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ProfileEditScreen(user: user),
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              const SizedBox(height: 6),
+
+              // 성별, 나이, 지역
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.primary, width: 1.5),
-                  borderRadius: BorderRadius.circular(25),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.edit_outlined, size: 16, color: AppColors.primary),
-                    SizedBox(width: 6),
-                    Text(
-                      '프로필 수정',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: user.gender == 'male'
+                            ? AppColors.male
+                            : AppColors.female,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        '${user.gender == 'male' ? '남' : '여'} · ${user.age}세 · ${user.displayLocation}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
               ),
+
+              // 자기소개
+              if (user.bio.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  user.bio,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+
+              // 프로필 수정 버튼 또는 정지 해제 카운트다운
+              if (user.isSuspended)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.timer_outlined,
+                          size: 16, color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Text(
+                        _getSuspensionRemainingText(user),
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProfileEditScreen(user: user),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.primary, width: 1.5),
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.edit_outlined,
+                            size: 16, color: AppColors.primary),
+                        SizedBox(width: 6),
+                        Text(
+                          '프로필 수정',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // 우측 상단 설정 아이콘
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const SettingsScreen()),
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                child: const Icon(
+                  Icons.settings_outlined,
+                  color: AppColors.textSecondary,
+                  size: 22,
+                ),
+              ),
             ),
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 
   // 프로필 이미지
   Widget _buildProfileImage(UserModel user) {
     final hasImage = user.profileImageUrls.isNotEmpty;
-    
+
     return Container(
       width: 72,
       height: 72,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: user.gender == 'male' 
-            ? [AppColors.male.withValues(alpha:0.3), AppColors.male.withValues(alpha:0.1)]
-            : [AppColors.female.withValues(alpha:0.3), AppColors.female.withValues(alpha:0.1)],
+          colors: user.gender == 'male'
+              ? [
+                  AppColors.male.withValues(alpha: 0.3),
+                  AppColors.male.withValues(alpha: 0.1)
+                ]
+              : [
+                  AppColors.female.withValues(alpha: 0.3),
+                  AppColors.female.withValues(alpha: 0.1)
+                ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -346,13 +391,15 @@ class MyProfileScreen extends StatelessWidget {
                 errorWidget: (context, url, error) => const CircleAvatar(
                   radius: 32,
                   backgroundColor: AppColors.cardLight,
-                  child: Icon(Icons.person, size: 32, color: AppColors.textTertiary),
+                  child: Icon(Icons.person,
+                      size: 32, color: AppColors.textTertiary),
                 ),
               )
             : const CircleAvatar(
                 radius: 32,
                 backgroundColor: AppColors.cardLight,
-                child: Icon(Icons.person, size: 32, color: AppColors.textTertiary),
+                child:
+                    Icon(Icons.person, size: 32, color: AppColors.textTertiary),
               ),
       ),
     );
@@ -366,14 +413,15 @@ class MyProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.primary.withValues(alpha:0.15),
-            AppColors.primaryLight.withValues(alpha:0.08),
+            AppColors.primary.withValues(alpha: 0.15),
+            AppColors.primaryLight.withValues(alpha: 0.08),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary.withValues(alpha:0.2), width: 0.5),
+        border: Border.all(
+            color: AppColors.primary.withValues(alpha: 0.2), width: 0.5),
       ),
       child: Row(
         children: [
@@ -382,7 +430,7 @@ class MyProfileScreen extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha:0.2),
+              color: AppColors.primary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
@@ -451,7 +499,7 @@ class MyProfileScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha:0.3),
+                    color: AppColors.primary.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -516,7 +564,8 @@ class MyProfileScreen extends StatelessWidget {
               }
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const WardedPostsScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const WardedPostsScreen()),
               );
             },
           ),
@@ -537,7 +586,8 @@ class MyProfileScreen extends StatelessWidget {
               }
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ReceivedRequestsScreen()),
+                MaterialPageRoute(
+                    builder: (context) => const ReceivedRequestsScreen()),
               );
             },
           ),
@@ -546,30 +596,7 @@ class MyProfileScreen extends StatelessWidget {
     );
   }
 
-  // 메뉴 리스트
-  Widget _buildMenuList(BuildContext context, UserModel user) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
-      ),
-      child: Column(
-        children: [
-          _MenuListItem(
-            icon: Icons.settings_outlined,
-            title: '설정',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  // 메뉴 리스트는 제거되고, 설정 아이콘은 프로필 헤더 우측 상단으로 이동함
 }
 
 // 퀵 메뉴 아이템
@@ -595,9 +622,12 @@ class _QuickMenuItem extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: isDisabled ? AppColors.card.withValues(alpha:0.5) : AppColors.card,
+          color: isDisabled
+              ? AppColors.card.withValues(alpha: 0.5)
+              : AppColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border.withValues(alpha:0.5), width: 0.5),
+          border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.5), width: 0.5),
         ),
         child: Column(
           children: [
@@ -612,10 +642,10 @@ class _QuickMenuItem extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    icon, 
-                    color: isDisabled 
-                        ? AppColors.textTertiary.withValues(alpha:0.4) 
-                        : AppColors.textSecondary, 
+                    icon,
+                    color: isDisabled
+                        ? AppColors.textTertiary.withValues(alpha: 0.4)
+                        : AppColors.textSecondary,
                     size: 22,
                   ),
                 ),
@@ -624,7 +654,8 @@ class _QuickMenuItem extends StatelessWidget {
                     right: -4,
                     top: -4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.error,
                         borderRadius: BorderRadius.circular(10),
@@ -646,8 +677,8 @@ class _QuickMenuItem extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isDisabled 
-                    ? AppColors.textTertiary.withValues(alpha:0.4) 
+                color: isDisabled
+                    ? AppColors.textTertiary.withValues(alpha: 0.4)
                     : AppColors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
@@ -659,60 +690,7 @@ class _QuickMenuItem extends StatelessWidget {
   }
 }
 
-// 메뉴 리스트 아이템
-class _MenuListItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final Widget? trailing;
-  final VoidCallback onTap;
-
-  const _MenuListItem({
-    required this.icon,
-    required this.title,
-    this.trailing,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: AppColors.textSecondary, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-            trailing ?? const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
-              size: 22,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// 메뉴 리스트 아이템 클래스는 제거됨 (설정 아이콘은 프로필 헤더 우측 상단으로 이동)
 
 /// 출석체크 (광고 리워드) 카드
 ///
@@ -774,12 +752,13 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
               children: const [
                 Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
                 SizedBox(width: 10),
-                Expanded(child: Text('무료 채팅권 1장이 지급되었어요 🎁')),
+                Expanded(child: Text('무료 채팅이 지급되었어요 🎁')),
               ],
             ),
             backgroundColor: AppColors.primary,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
             duration: const Duration(seconds: 3),
           ),
@@ -827,15 +806,15 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFFFFB300).withValues(alpha: 0.15),
-            const Color(0xFFFF8F00).withValues(alpha: 0.08),
+            AppColors.primary.withValues(alpha: 0.15),
+            AppColors.primaryLight.withValues(alpha: 0.08),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0xFFFFB300).withValues(alpha: 0.3),
+          color: AppColors.primary.withValues(alpha: 0.2),
           width: 0.5,
         ),
       ),
@@ -846,12 +825,12 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFFFFB300).withValues(alpha: 0.2),
+              color: AppColors.primary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
               Icons.card_giftcard_rounded,
-              color: Color(0xFFFF8F00),
+              color: AppColors.primary,
               size: 24,
             ),
           ),
@@ -873,9 +852,10 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
                     ),
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFB300).withValues(alpha: 0.2),
+                        color: AppColors.primary.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
@@ -883,7 +863,7 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFFF8F00),
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -891,9 +871,7 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isFree
-                      ? '광고 시청 시 무료 채팅권 1장 지급'
-                      : '버튼 한 번으로 무료 채팅권 1장 지급',
+                  isFree ? '광고 시청 시 무료 채팅 1회 지급' : '무료 채팅 1회 지급',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
@@ -910,22 +888,23 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Color(0xFFFF8F00),
+                    color: AppColors.primary,
                   ),
                 )
               : GestureDetector(
                   onTap: (_canClaim && !_claiming) ? _handleClaim : null,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
                       color: _canClaim
-                          ? const Color(0xFFFF8F00)
+                          ? AppColors.primary
                           : AppColors.textTertiary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: _canClaim
                           ? [
                               BoxShadow(
-                                color: const Color(0xFFFF8F00).withValues(alpha: 0.3),
+                                color: AppColors.primary.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),

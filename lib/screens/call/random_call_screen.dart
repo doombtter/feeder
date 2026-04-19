@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/app_confirm_dialog.dart';
+import '../../core/widgets/app_snack_bar.dart';
 import '../../core/widgets/membership_widgets.dart';
 import '../../services/random_call_service.dart';
 import '../../services/user_service.dart';
@@ -387,29 +389,71 @@ class _RandomCallScreenState extends State<RandomCallScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
+    return PopScope(
+      canPop: !_isMatching,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        // 매칭 중 뒤로가기 시 취소 확인
+        final ok = await AppConfirmDialog.show(
+          context,
+          title: '매칭 취소',
+          message: '매칭을 중단하고 나가시겠어요?',
+          confirmLabel: '나가기',
+          cancelLabel: '계속 매칭',
+          icon: Icons.phone_disabled_rounded,
+          isDestructive: true,
+        );
+        if (ok == true) {
+          _matchingTimer?.cancel();
+          await _callService.cancelMatching();
+          if (mounted) {
+            setState(() => _isMatching = false);
+            Navigator.pop(context);
+          }
+        }
+      },
+      child: Scaffold(
         backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        title: const Text('랜덤 전화'),
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
+        appBar: AppBar(
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          title: const Text('랜덤 전화'),
+          leading: IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
             ),
-            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+            onPressed: () async {
+              if (_isMatching) {
+                final ok = await AppConfirmDialog.show(
+                  context,
+                  title: '매칭 취소',
+                  message: '매칭을 중단하고 나가시겠어요?',
+                  confirmLabel: '나가기',
+                  cancelLabel: '계속 매칭',
+                  icon: Icons.phone_disabled_rounded,
+                  isDestructive: true,
+                );
+                if (ok != true) return;
+                _matchingTimer?.cancel();
+                await _callService.cancelMatching();
+                if (!mounted) return;
+                setState(() => _isMatching = false);
+              }
+              if (mounted) Navigator.pop(context);
+            },
           ),
-          onPressed: () => Navigator.pop(context),
         ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            : _buildContent(),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _buildContent(),
     );
   }
 

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'dart:io';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/image_picker_helper.dart';
 import '../../models/user_model.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -80,39 +79,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       return;
     }
 
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 80,
+    final file = await ImagePickerHelper.pickAndCrop(
+      context,
+      preset: ImageCropPreset.profile,
     );
-
-    if (pickedFile != null) {
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: pickedFile.path,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: '프로필 이미지 편집',
-            toolbarColor: AppColors.primary,
-            toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            aspectRatioPresets: [CropAspectRatioPreset.square],
-          ),
-          IOSUiSettings(
-            title: '프로필 이미지 편집',
-            aspectRatioLockEnabled: true,
-            aspectRatioPresets: [CropAspectRatioPreset.square],
-          ),
-        ],
-      );
-
-      if (croppedFile != null) {
-        setState(() {
-          _newImages.add(File(croppedFile.path));
-        });
-      }
+    if (file != null && mounted) {
+      setState(() => _newImages.add(file));
     }
   }
 

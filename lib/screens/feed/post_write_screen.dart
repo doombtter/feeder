@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/app_confirm_dialog.dart';
+import '../../core/widgets/image_picker_helper.dart';
 import '../../core/widgets/voice/voice.dart';
 import '../../services/post_service.dart';
 import '../../services/user_service.dart';
@@ -36,35 +36,12 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 70,
+    final file = await ImagePickerHelper.pickAndCrop(
+      context,
+      preset: ImageCropPreset.post,
     );
-
-    if (pickedFile != null) {
-      final croppedFile = await ImageCropper().cropImage(
-        sourcePath: pickedFile.path,
-        compressQuality: 70,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: '이미지 편집',
-            toolbarColor: AppColors.primary,
-            toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.original,
-            lockAspectRatio: false,
-          ),
-          IOSUiSettings(title: '이미지 편집'),
-        ],
-      );
-
-      if (croppedFile != null) {
-        setState(() {
-          _selectedImage = File(croppedFile.path);
-        });
-      }
+    if (file != null && mounted) {
+      setState(() => _selectedImage = file);
     }
   }
 
@@ -144,15 +121,52 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
     }
   }
 
+  /// 내용이 있을 때 뒤로가기 누르면 확인 다이얼로그
+  bool get _hasContent {
+    return _contentController.text.trim().isNotEmpty ||
+        _selectedImage != null ||
+        _voiceController.hasRecording;
+  }
+
+  Future<bool> _confirmExit() async {
+    if (!_hasContent) return true;
+    final ok = await AppConfirmDialog.show(
+      context,
+      title: '작성 취소',
+      message: '작성 중인 내용이 사라져요. 나가시겠어요?',
+      confirmLabel: '나가기',
+      cancelLabel: '계속 작성',
+      icon: Icons.edit_off_rounded,
+      isDestructive: true,
+    );
+    return ok == true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (await _confirmExit() && mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         title: const Text('글 작성'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
+          onPressed: () async {
+            if (await _confirmExit() && mounted) {
+              Navigator.pop(context);
+            }
+          },
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -311,6 +325,7 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 

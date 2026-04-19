@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 elevation: 0,
                 scrolledUnderElevation: 0,
                 actions: [
-                  // 멤버십 아이콘
+                  // 멤버십 아이콘 (모든 탭 공통)
                   MembershipIcon(
                     tier: _membershipTier,
                     onTap: () {
@@ -156,67 +156,69 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
                   const SizedBox(width: 8),
-                  // 랜덤 전화 버튼
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      gradient: _isSuspended ? null : AppColors.primaryGradient,
-                      color: _isSuspended ? AppColors.card : null,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _isSuspended ? AppColors.border : Colors.transparent, 
-                        width: 0.5,
+                  // 랜덤 전화: Chat 탭에서만 노출 (대화 관련 기능)
+                  if (_currentIndex == 2)
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        gradient: _isSuspended ? null : AppColors.primaryGradient,
+                        color: _isSuspended ? AppColors.card : null,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _isSuspended ? AppColors.border : Colors.transparent,
+                          width: 0.5,
+                        ),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.phone_rounded,
+                          size: 20,
+                          color: _isSuspended
+                              ? AppColors.textTertiary.withValues(alpha:0.4)
+                              : Colors.white,
+                        ),
+                        onPressed: _isSuspended ? null : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RandomCallScreen(),
+                            ),
+                          );
+                        },
                       ),
                     ),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.phone_rounded,
-                        size: 20,
-                        color: _isSuspended 
-                            ? AppColors.textTertiary.withValues(alpha:0.4)
-                            : Colors.white,
+                  // 최근 접속자: Feed 탭에서만 노출 (탐색 관련 기능)
+                  if (_currentIndex == 0)
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border, width: 0.5),
                       ),
-                      onPressed: _isSuspended ? null : () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const RandomCallScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  // 최근 접속자 버튼
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border, width: 0.5),
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.people_outline_rounded, 
-                        size: 22,
-                        color: _isSuspended 
-                            ? AppColors.textTertiary.withValues(alpha:0.4)
-                            : AppColors.textSecondary,
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.people_outline_rounded,
+                          size: 22,
+                          color: _isSuspended
+                              ? AppColors.textTertiary.withValues(alpha:0.4)
+                              : AppColors.textSecondary,
+                        ),
+                        onPressed: _isSuspended ? null : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RecentUsersScreen(),
+                            ),
+                          );
+                        },
                       ),
-                      onPressed: _isSuspended ? null : () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const RecentUsersScreen(),
-                          ),
-                        );
-                      },
                     ),
-                  ),
-                  // 알림 버튼
+                  // 알림 버튼 (모든 탭 공통)
                   StreamBuilder<int>(
                     stream: _notificationService.getUnreadCountStream(_uid),
                     builder: (context, snapshot) {

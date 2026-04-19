@@ -2,10 +2,11 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../core/widgets/app_confirm_dialog.dart';
+import '../../core/widgets/image_picker_helper.dart';
 import '../../services/shot_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
@@ -74,16 +75,12 @@ class _ShotCreateScreenState extends State<ShotCreateScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1080,
-      maxHeight: 1920,
-      imageQuality: 80,
+    final file = await ImagePickerHelper.pickAndCrop(
+      context,
+      preset: ImageCropPreset.shot,
     );
-
-    if (pickedFile != null) {
-      setState(() => _selectedImage = File(pickedFile.path));
+    if (file != null && mounted) {
+      setState(() => _selectedImage = file);
     }
   }
 
@@ -263,14 +260,51 @@ class _ShotCreateScreenState extends State<ShotCreateScreen> {
     }
   }
 
+  /// 작성 중인 내용이 있는지
+  bool get _hasContent {
+    return _captionController.text.trim().isNotEmpty ||
+        _selectedImage != null ||
+        _recordPath != null;
+  }
+
+  Future<bool> _confirmExit() async {
+    if (!_hasContent) return true;
+    final ok = await AppConfirmDialog.show(
+      context,
+      title: '작성 취소',
+      message: '작성 중인 내용이 사라져요. 나가시겠어요?',
+      confirmLabel: '나가기',
+      cancelLabel: '계속 작성',
+      icon: Icons.edit_off_rounded,
+      isDestructive: true,
+    );
+    return ok == true;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (await _confirmExit() && mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('새 Shot'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, size: 18),
+          onPressed: () async {
+            if (await _confirmExit() && mounted) {
+              Navigator.pop(context);
+            }
+          },
+        ),
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _submit,
@@ -382,6 +416,7 @@ class _ShotCreateScreenState extends State<ShotCreateScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
