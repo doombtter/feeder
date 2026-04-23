@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Siflab — Workshop of quiet craft</title>
+<meta name="description" content="siflab은 소프트웨어를 만드는 작은 공방입니다. Named after Sif, Norse goddess of golden harvest." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+KR:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-deeper: #080b10;
+  --surface: #141a22;
+  --ink: #e8e1d0;
+  --ink-soft: #a59f91;
+  --ink-fade: #5c5a52;
+  --gold: #c9a876;
+  --gold-bright: #e4c896;
+  --frost: #8b9db0;
+  --line: rgba(232, 225, 208, 0.1);
+  --line-bright: rgba(232, 225, 208, 0.2);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Noto Serif KR', 'Cormorant Garamond', serif;
+  font-size: 17px;
+  line-height: 1.65;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(2px 2px at 20% 30%, var(--gold-bright), transparent),
+    radial-gradient(1px 1px at 60% 70%, var(--frost), transparent),
+    radial-gradient(1px 1px at 50% 20%, var(--ink), transparent),
+    radial-gradient(2px 2px at 80% 50%, var(--gold), transparent),
+    radial-gradient(1.5px 1.5px at 15% 85%, var(--gold-bright), transparent),
+    radial-gradient(1px 1px at 35% 55%, var(--frost), transparent),
+    radial-gradient(2px 2px at 72% 25%, var(--gold), transparent);
+  background-size: 550px 550px;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 1;
+  animation: twinkle 8s ease-in-out infinite alternate;
+}
+
+@keyframes twinkle {
+  0% { opacity: 0.25; }
+  100% { opacity: 0.5; }
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  top: -30%;
+  left: -20%;
+  width: 140%;
+  height: 60%;
+  background: radial-gradient(ellipse at center, rgba(201, 168, 118, 0.06) 0%, rgba(139, 157, 176, 0.03) 30%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(60px);
+  animation: drift 20s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  100% { transform: translate(-5%, 8%) rotate(2deg); }
+}
+
+a { color: inherit; text-decoration: none; }
+nav, section, header, footer { position: relative; z-index: 2; }
+
+[data-lang] { display: none; }
+body[lang="ko"] [data-lang="ko"] { display: unset; }
+body[lang="en"] [data-lang="en"] { display: unset; }
+
+.lang-toggle {
+  display: flex;
+  gap: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  border: 1px solid var(--line-bright);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.lang-toggle button {
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+}
+
+.lang-toggle button.active {
+  background: var(--gold);
+  color: var(--bg);
+}
+
+.lang-toggle button:hover:not(.active) { color: var(--gold); }
+
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28px 48px;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: linear-gradient(to bottom, rgba(13, 17, 23, 0.8), transparent);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+
+.logo-rune {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--gold);
+  border-radius: 50%;
+  font-family: serif;
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.nav-links a {
+  color: var(--ink-soft);
+  transition: color 0.3s;
+  position: relative;
+}
+
+.nav-links a:hover { color: var(--gold); }
+
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0; right: 0;
+  height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s ease;
+}
+
+.nav-links a:hover::after { transform: scaleX(1); }
+
+.hero {
+  min-height: 100vh;
+  padding: 140px 48px 80px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-rune-bg {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: serif;
+  font-size: clamp(20rem, 40vw, 40rem);
+  color: var(--gold);
+  opacity: 0.03;
+  pointer-events: none;
+  line-height: 1;
+  user-select: none;
+  z-index: 0;
+}
+
+.hero-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-fade);
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  z-index: 2;
+}
+
+.hero-meta .rune {
+  color: var(--gold);
+  font-size: 14px;
+  margin-right: 6px;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  padding: 80px 0;
+}
+
+.hero-overline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: var(--gold);
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+}
+
+.hero-overline::before,
+.hero-overline::after {
+  content: '';
+  flex: 1;
+  max-width: 60px;
+  height: 1px;
+  background: var(--gold);
+  opacity: 0.4;
+}
+
+.hero-title {
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+  font-weight: 300;
+  font-size: clamp(3rem, 8vw, 8rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.hero-title em {
+  font-style: italic;
+  color: var(--gold);
+  font-weight: 400;
+}
+
+.hero-title .small {
+  font-size: 0.7em;
+  color: var(--ink-soft);
+  font-weight: 300;
+}
+
+.hero-bottom {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 40px;
+  align-items: center;
+  padding-top: 40px;
+  border-top: 1px solid var(--line);
+  position: relative;
+  z-index: 2;
+}
+
+.hero-lead {
+  font-family: 'Noto Serif KR', serif;
+  font-size: clamp(1rem, 1.4vw, 1.15rem);
+  font-weight: 300;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  max-width: 340px;
+  font-style: italic;
+}
+
+.hero-lead em {
+  color: var(--gold);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.hero-center-rune {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--gold);
+}
+
+.hero-center-rune .char {
+  font-family: serif;
+  font-size: 28px;
+  opacity: 0.7;
+}
+
+.hero-center-rune .line {
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--gold), transparent);
+}
+
+.hero-right {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-fade);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.hero-right .seoul {
+  color: var(--gold);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+section {
+  padding: 140px 48px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: var(--gold);
+  margin-bottom: 48px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.section-label::before {
+  content: '❖';
+  font-size: 14px;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  max-width: 80px;
+  height: 1px;
+  background: var(--line-bright);
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 100px;
+  align-items: start;
+}
+
+.about-myth {
+  position: relative;
+  padding: 40px;
+  border: 1px solid var(--line-bright);
+  background: var(--surface);
+}
+
+.about-myth::before {
+  content: '';
+  position: absolute;
+  top: 12px; left: 12px; right: 12px; bottom: 12px;
+  border: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.myth-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.myth-text {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--ink-soft);
+}
+
+.myth-text em {
+  font-style: italic;
+  color: var(--gold);
+}
+
+.myth-quote {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 20px;
+  color: var(--ink);
+  margin: 24px 0 0;
+  padding-left: 20px;
+  border-left: 2px solid var(--gold);
+  line-height: 1.5;
+}
+
+.about-heading {
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+  font-weight: 300;
+  font-size: clamp(2.5rem, 4.5vw, 4rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 32px;
+}
+
+.about-heading em {
+  font-style: italic;
+  color: var(--gold);
+  font-weight: 400;
+}
+
+.about-body {
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+
+.about-body p + p { margin-top: 20px; }
+
+.about-body strong {
+  color: var(--gold);
+  font-weight: 500;
+}
+
+.works {
+  padding: 140px 48px;
+  background: var(--bg-deeper);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  max-width: none;
+  margin: 0;
+}
+
+.works-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.works-heading {
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+  font-weight: 300;
+  font-size: clamp(2.5rem, 4vw, 3.5rem);
+  line-height: 1.15;
+  max-width: 800px;
+  margin-bottom: 80px;
+}
+
+.works-heading em {
+  font-style: italic;
+  color: var(--gold);
+}
+
+.work {
+  display: grid;
+  grid-template-columns: 80px 200px 1fr 40px;
+  gap: 40px;
+  align-items: center;
+  padding: 36px 0;
+  border-top: 1px solid var(--line);
+  transition: padding 0.5s cubic-bezier(0.22, 1, 0.36, 1), background 0.5s;
+  cursor: pointer;
+  position: relative;
+}
+
+.work:last-child { border-bottom: 1px solid var(--line); }
+
+.work:hover {
+  padding-left: 24px;
+  background: linear-gradient(90deg, rgba(201, 168, 118, 0.05), transparent);
+}
+
+.work:hover .work-arrow {
+  color: var(--gold);
+  transform: translateX(12px);
+}
+
+.work:hover .work-index { color: var(--gold); }
+.work:hover .work-name em { color: var(--gold-bright); }
+
+.work-index {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--ink-fade);
+  transition: color 0.3s;
+}
+
+.work-type {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--ink-fade);
+}
+
+.work-name {
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.work-name em {
+  font-style: italic;
+  color: var(--ink);
+  transition: color 0.3s;
+}
+
+.work-desc {
+  font-size: 14px;
+  color: var(--ink-fade);
+  line-height: 1.5;
+  margin-top: 8px;
+  max-width: 420px;
+  font-style: italic;
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+}
+
+.work-arrow {
+  font-family: serif;
+  font-size: 32px;
+  color: var(--ink-fade);
+  transition: all 0.4s ease;
+  font-weight: 300;
+  text-align: right;
+}
+
+.principles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 60px;
+  margin-top: 80px;
+}
+
+.principle {
+  position: relative;
+  padding: 32px 0 0;
+  border-top: 1px solid var(--line-bright);
+}
+
+.principle-rune {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--gold);
+  background: var(--bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: serif;
+  font-size: 18px;
+  color: var(--gold);
+}
+
+.principle-title {
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+  margin-bottom: 14px;
+  color: var(--ink);
+}
+
+.principle-title em {
+  font-style: italic;
+  color: var(--gold);
+}
+
+.principle-body {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.contact {
+  padding: 180px 48px;
+  text-align: center;
+  position: relative;
+  max-width: none;
+  border-top: 1px solid var(--line);
+}
+
+.contact-rune-bg {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: serif;
+  font-size: clamp(18rem, 35vw, 32rem);
+  color: var(--gold);
+  opacity: 0.03;
+  pointer-events: none;
+  line-height: 1;
+  user-select: none;
+}
+
+.contact-content {
+  position: relative;
+  z-index: 2;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.contact-overline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: var(--gold);
+  margin-bottom: 24px;
+}
+
+.contact-heading {
+  font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+  font-weight: 300;
+  font-size: clamp(2.25rem, 5vw, 4rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 40px;
+}
+
+.contact-heading em {
+  font-style: italic;
+  color: var(--gold);
+  font-weight: 400;
+}
+
+.contact-email {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 44px;
+  border: 1px solid var(--gold);
+  border-radius: 0;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 22px;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+  position: relative;
+  transition: all 0.4s ease;
+  overflow: hidden;
+}
+
+.contact-email > span { position: relative; z-index: 2; }
+
+.contact-email::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 0;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: 1;
+}
+
+.contact-email:hover { color: var(--bg); }
+.contact-email:hover::before { width: 100%; }
+
+.contact-arrow {
+  position: relative;
+  z-index: 2;
+  transition: transform 0.4s;
+}
+
+.contact-email:hover .contact-arrow { transform: translateX(8px); }
+
+footer {
+  padding: 40px 48px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  color: var(--ink-fade);
+}
+
+footer .rune {
+  color: var(--gold);
+  font-size: 13px;
+  margin: 0 4px;
+}
+
+footer .live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--gold);
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(201, 168, 118, 0.6); }
+  50% { opacity: 0.5; box-shadow: 0 0 0 6px rgba(201, 168, 118, 0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1), transform 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal.delay-1 { transition-delay: 0.15s; }
+.reveal.delay-2 { transition-delay: 0.3s; }
+.reveal.delay-3 { transition-delay: 0.45s; }
+
+@media (max-width: 900px) {
+  nav { padding: 20px 24px; }
+  .nav-links { gap: 16px; font-size: 10px; }
+  .logo { font-size: 18px; }
+  .hero { padding: 120px 24px 60px; }
+  .hero-bottom {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    text-align: center;
+  }
+  .hero-lead, .hero-right { max-width: 100%; text-align: center; }
+  .hero-center-rune { order: -1; }
+  section { padding: 100px 24px; }
+  .about-grid { grid-template-columns: 1fr; gap: 60px; }
+  .works { padding: 100px 24px; }
+  .work {
+    grid-template-columns: auto 1fr;
+    gap: 20px;
+  }
+  .work-type, .work-arrow { display: none; }
+  .work:hover { padding-left: 0; }
+  .principles-grid { grid-template-columns: 1fr; gap: 48px; }
+  .contact { padding: 120px 24px; }
+  .contact-email {
+    padding: 18px 32px;
+    font-size: 18px;
+    width: 100%;
+    justify-content: center;
+  }
+  footer {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+    padding: 28px 24px;
+  }
+}
+</style>
+</head>
+<body lang="ko">
+
+<nav>
+  <a href="#" class="logo">
+    <span class="logo-rune">ᛋ</span>
+    <span>SIFLAB</span>
+  </a>
+  <div class="nav-links">
+    <a href="#about"><span data-lang="ko">소개</span><span data-lang="en">About</span></a>
+    <a href="#works"><span data-lang="ko">작업</span><span data-lang="en">Works</span></a>
+    <a href="#contact"><span data-lang="ko">연락</span><span data-lang="en">Contact</span></a>
+    <div class="lang-toggle">
+      <button data-set-lang="ko" class="active">KO</button>
+      <button data-set-lang="en">EN</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-rune-bg">ᛋ</div>
+
+  <div class="hero-meta">
+    <span><span class="rune">ᚠ</span>siflab · EST. MMXXIV</span>
+    <span data-lang="ko">작은 공방, 긴 시간</span>
+    <span data-lang="en">A small workshop, a long arc</span>
+  </div>
+
+  <div class="hero-content">
+    <div class="hero-overline">
+      <span data-lang="ko">황금 수확의 여신을 따라</span>
+      <span data-lang="en">Named after the goddess of golden harvest</span>
+    </div>
+    <h1 class="hero-title reveal">
+      <span data-lang="ko">조용히<br><em>오래가는 것</em>을<br><span class="small">만듭니다</span></span>
+      <span data-lang="en">We craft<br><em>things that last</em>,<br><span class="small">quietly.</span></span>
+    </h1>
+  </div>
+
+  <div class="hero-bottom">
+    <p class="hero-lead reveal delay-1">
+      <span data-lang="ko">siflab은 북유럽 신화의 <em>Sif</em>에서 이름을 빌렸습니다. 풍요와 가족, 그리고 <em>황금빛 머리카락</em>의 여신. 오래 지속되는 것을 짓는 손의 은유입니다.</span>
+      <span data-lang="en">siflab takes its name from <em>Sif</em>, Norse goddess of harvest, hearth, and <em>golden hair</em> — a metaphor for hands that build to endure.</span>
+    </p>
+
+    <div class="hero-center-rune reveal delay-2">
+      <span class="char">ᛉ</span>
+      <span class="line"></span>
+    </div>
+
+    <div class="hero-right reveal delay-3">
+      <div class="seoul">Seoul · 37.5°N</div>
+      <div data-lang="ko">독립 스튜디오 · 2026</div>
+      <div data-lang="en">Independent studio · 2026</div>
+    </div>
+  </div>
+</header>
+
+<section id="about">
+  <div class="section-label">
+    I <span data-lang="ko">· 신화와 이름</span><span data-lang="en">· The Myth</span>
+  </div>
+
+  <div class="about-grid">
+    <div class="about-myth reveal">
+      <div class="myth-title">From the Prose Edda</div>
+      <p class="myth-text" data-lang="ko">황금빛 머리카락을 가진 Sif는 대지와 가족의 여신입니다. 그녀의 머리카락은 <em>가을의 밀밭</em>이 되고, 그녀의 손길이 닿은 땅은 해마다 수확을 맺습니다.</p>
+      <p class="myth-text" data-lang="en">Sif of the golden hair, goddess of earth and hearth. Her hair is the <em>autumn wheat</em>, and every field she touches bears a harvest, year after year.</p>
+
+      <div class="myth-quote" data-lang="ko">"짓는 것은 시간에<br>맡기는 일이다."</div>
+      <div class="myth-quote" data-lang="en">"To build is to<br>entrust yourself to time."</div>
+    </div>
+
+    <div class="reveal delay-1">
+      <h2 class="about-heading">
+        <span data-lang="ko"><em>천천히</em>,<br><em>정직하게</em>,<br>길게.</span>
+        <span data-lang="en"><em>Slow</em>.<br><em>Honest</em>.<br>Long-lasting.</span>
+      </h2>
+      <div class="about-body">
+        <p data-lang="ko">siflab은 한 명의 개발자로 시작한 작은 공방입니다. 우리는 <strong>큰 것을 빠르게</strong> 만들지 않습니다. 대신 <strong>작은 것을 오래</strong> 고쳐갑니다.</p>
+        <p data-lang="ko">트렌드보다는 <strong>우리가 직접 겪은 문제</strong>를 따라갑니다. 그 문제가 구체적일수록, 비슷한 문제를 가진 누군가가 자연스럽게 찾아옵니다.</p>
+        <p data-lang="ko">만든 것은 버리지 않습니다. 유저가 한 명이라도 남아 있다면, 우리는 여전히 그것을 책임집니다.</p>
+
+        <p data-lang="en">siflab is a workshop of one. We do not build <strong>big things quickly</strong> — we refine <strong>small things, over years</strong>.</p>
+        <p data-lang="en">We follow problems we have lived ourselves, not market trends. The more specific the problem, the more naturally a community forms around it.</p>
+        <p data-lang="en">We don't abandon what we make. If one user remains, we are still responsible for it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="works" class="works">
+  <div class="works-inner">
+    <div class="section-label">
+      II <span data-lang="ko">· 지금 짓고 있는 것</span><span data-lang="en">· Currently Forging</span>
+    </div>
+
+    <h2 class="works-heading reveal">
+      <span data-lang="ko">지금은 <em>두 개</em>의 제품이<br>공방에 놓여 있습니다.</span>
+      <span data-lang="en">Two works currently<br>rest on our bench.</span>
+    </h2>
+
+    <a href="https://loavesting.com" target="_blank" rel="noopener" class="work">
+      <div class="work-index">ᚠ · 001</div>
+      <div class="work-type">
+        <span data-lang="ko">웹 · 유틸리티</span>
+        <span data-lang="en">Web · Utility</span>
+      </div>
+      <div>
+        <div class="work-name"><em>Loavesting</em></div>
+        <p class="work-desc" data-lang="ko">로스트아크 유저를 위한 재련 견적 계산기. 정확한 기댓값과 매일 쓰기 좋은 흐름으로, 커뮤니티가 오래 찾는 도구.</p>
+        <p class="work-desc" data-lang="en">A refinement calculator for Lost Ark players. Precise expected values, daily-friendly flow — a tool the community returns to.</p>
+      </div>
+      <div class="work-arrow">→</div>
+    </a>
+
+    <a href="#" class="work">
+      <div class="work-index">ᚢ · 002</div>
+      <div class="work-type">
+        <span data-lang="ko">모바일 · 소셜</span>
+        <span data-lang="en">Mobile · Social</span>
+      </div>
+      <div>
+        <div class="work-name"><em>Feeder</em></div>
+        <p class="work-desc" data-lang="ko">익명으로 연결되는 작은 아지트. 사진, 짧은 영상, 목소리로 부담 없이 주고받는 대화.</p>
+        <p class="work-desc" data-lang="en">A quiet haven for anonymous connection — photos, short clips, voices, exchanged without weight.</p>
+      </div>
+      <div class="work-arrow">→</div>
+    </a>
+  </div>
+</section>
+
+<section id="principles">
+  <div class="section-label">
+    III <span data-lang="ko">· 공방의 신조</span><span data-lang="en">· Workshop Commandments</span>
+  </div>
+
+  <h2 class="about-heading reveal" style="max-width: 800px;">
+    <span data-lang="ko"><em>믿는 것</em>,<br>그리고 만들지 <em>않는 것</em>.</span>
+    <span data-lang="en">What we <em>believe</em>,<br>and what we will <em>not</em> make.</span>
+  </h2>
+
+  <div class="principles-grid">
+    <div class="principle reveal">
+      <div class="principle-rune">ᚠ</div>
+      <h3 class="principle-title">
+        <span data-lang="ko">필요하면 <em>오래 쓴다</em></span>
+        <span data-lang="en">Kept, not <em>abandoned</em></span>
+      </h3>
+      <p class="principle-body" data-lang="ko">한 번 만든 제품은 함부로 버리지 않습니다. 유저가 한 명이라도 남아 있다면, 그것은 여전히 우리의 책임입니다.</p>
+      <p class="principle-body" data-lang="en">Whatever we make, we keep. If one user remains, that product is still ours to maintain.</p>
+    </div>
+
+    <div class="principle reveal delay-1">
+      <div class="principle-rune">ᚢ</div>
+      <h3 class="principle-title">
+        <span data-lang="ko">크기보다 <em>밀도</em></span>
+        <span data-lang="en">Density over <em>scale</em></span>
+      </h3>
+      <p class="principle-body" data-lang="ko">기능을 많이 붙이는 것보다 하나를 정확하게 하는 것. 무게는 코드가 아니라 약속에서 옵니다.</p>
+      <p class="principle-body" data-lang="en">Doing one thing accurately beats adding many. Weight comes from promises, not code.</p>
+    </div>
+
+    <div class="principle reveal delay-2">
+      <div class="principle-rune">ᚦ</div>
+      <h3 class="principle-title">
+        <span data-lang="ko">유저는 <em>숫자가 아니다</em></span>
+        <span data-lang="en">Users are <em>not numbers</em></span>
+      </h3>
+      <p class="principle-body" data-lang="ko">DAU, 리텐션, 전환율은 도구일 뿐입니다. 누가 어떻게 쓰는지 직접 보고, 듣고, 답합니다.</p>
+      <p class="principle-body" data-lang="en">DAU, retention, conversion — all tools. We see, hear, and answer the humans behind the data.</p>
+    </div>
+  </div>
+</section>
+
+<section id="contact" class="contact">
+  <div class="contact-rune-bg">ᛏ</div>
+  <div class="contact-content">
+    <div class="contact-overline">
+      IV <span data-lang="ko">· 연락</span><span data-lang="en">· Contact</span>
+    </div>
+    <h2 class="contact-heading reveal">
+      <span data-lang="ko">함께 이야기하고 싶은<br><em>작은 아이디어</em>가 있나요?</span>
+      <span data-lang="en">Have a <em>small idea</em><br>worth sharing?</span>
+    </h2>
+    <a href="mailto:doombtter@gmail.com" class="contact-email reveal delay-1">
+      <span>doombtter@gmail.com</span>
+      <span class="contact-arrow">→</span>
+    </a>
+  </div>
+</section>
+
+<footer>
+  <div>
+    <span class="live-dot"></span>
+    <span data-lang="ko">Seoul, KR에서 보내는 중 · 37.5°N</span>
+    <span data-lang="en">Broadcasting from Seoul, KR · 37.5°N</span>
+  </div>
+  <div>
+    © MMXXVI siflab <span class="rune">ᛋ</span>
+    <span data-lang="ko">정성으로 지음</span>
+    <span data-lang="en">Crafted with care</span>
+  </div>
+</footer>
+
+<script>
+  const buttons = document.querySelectorAll('[data-set-lang]');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lang = btn.dataset.setLang;
+      document.body.setAttribute('lang', lang);
+      buttons.forEach(b => b.classList.toggle('active', b === btn));
+      localStorage.setItem('siflab-lang', lang);
+    });
+  });
+
+  const saved = localStorage.getItem('siflab-lang');
+  if (saved && (saved === 'ko' || saved === 'en')) {
+    document.body.setAttribute('lang', saved);
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.setLang === saved));
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in-view');
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

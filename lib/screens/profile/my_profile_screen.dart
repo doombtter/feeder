@@ -798,7 +798,7 @@ class _AttendanceRewardCardState extends State<AttendanceRewardCard> {
             ? '내일 다시 도전!'
             : isFree
                 ? '광고 보고 받기'
-                : '출석체크 받기';
+                : '출석체크';
 
     return Container(
       width: double.infinity,

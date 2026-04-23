@@ -50,26 +50,30 @@ class _WardedUsersScreenState extends State<WardedUsersScreen> {
 
     try {
       // wards 서브컬렉션에서 와드한 유저 목록 조회
+      // 저장 필드명이 `createdAt`이므로 동일하게 정렬
       final wardsSnapshot = await _firestore
           .collection('posts')
           .doc(widget.postId)
           .collection('wards')
-          .orderBy('wardedAt', descending: true)
+          .orderBy('createdAt', descending: true)
           .get();
 
-      final users = <_WardedUser>[];
-
-      for (final wardDoc in wardsSnapshot.docs) {
+      // 유저 문서를 병렬로 가져와서 N+1 쿼리 문제 해결
+      final futures = wardsSnapshot.docs.map((wardDoc) async {
         final userId = wardDoc.id;
-        final wardedAt = (wardDoc.data()['wardedAt'] as Timestamp?)?.toDate();
+        final wardedAt = (wardDoc.data()['createdAt'] as Timestamp?)?.toDate();
 
-        // 유저 정보 조회
         final userDoc = await _firestore.collection('users').doc(userId).get();
-        if (userDoc.exists) {
-          final user = UserModel.fromFirestore(userDoc);
-          users.add(_WardedUser(user: user, wardedAt: wardedAt));
-        }
-      }
+        if (!userDoc.exists) return null;
+
+        final user = UserModel.fromFirestore(userDoc);
+        if (user.isDeleted) return null;
+
+        return _WardedUser(user: user, wardedAt: wardedAt);
+      });
+
+      final results = await Future.wait(futures);
+      final users = results.whereType<_WardedUser>().toList();
 
       if (mounted) {
         setState(() {
@@ -188,40 +192,88 @@ class _WardedUsersScreenState extends State<WardedUsersScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              shape: BoxShape.circle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.bookmark_border_rounded,
+                size: 48,
+                color: AppColors.textTertiary,
+              ),
             ),
-            child: const Icon(
-              Icons.bookmark_border_rounded,
-              size: 48,
-              color: AppColors.textTertiary,
+            const SizedBox(height: 20),
+            const Text(
+              '아직 와드한 사람이 없어요',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '아직 와드한 사람이 없어요',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+            const SizedBox(height: 8),
+            const Text(
+              '다른 유저가 이 글을 와드하면\n누가 관심 있는지 확인할 수 있어요',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '다른 유저가 이 글을 와드하면\n여기에 표시돼요',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textTertiary,
+            const SizedBox(height: 24),
+            // 가이드 팁
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                  width: 0.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.tips_and_updates_rounded,
+                          size: 16, color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        '와드는 이럴 때 눌러요',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '• 다시 읽고 싶은 글일 때\n'
+                    '• 작성자에게 관심이 있을 때\n'
+                    '• 답글 달기는 부담스러울 때',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

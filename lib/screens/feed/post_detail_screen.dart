@@ -321,7 +321,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         Row(
                           children: [
                             GestureDetector(
-                              onTap: _toggleWard,
+                              onTap: () {
+                                // 내 글이고 MAX면 와드한 사람 목록 열기
+                                if (isAuthor &&
+                                    MembershipBenefits.canViewWardedUsers(_membershipTier)) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => WardedUsersScreen(
+                                        postId: widget.post.id,
+                                        postTitle: widget.post.content,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  // 다른 유저의 글이면 와드 토글
+                                  _toggleWard();
+                                }
+                              },
                               child: Row(
                                 children: [
                                   Icon(
@@ -341,6 +358,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                       fontSize: 14,
                                     ),
                                   ),
+                                  // 내 글 MAX일 때 탭 가능함을 시각적으로 알림
+                                  if (isAuthor &&
+                                      MembershipBenefits.canViewWardedUsers(_membershipTier)) ...[
+                                    const SizedBox(width: 2),
+                                    Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 16,
+                                      color: MembershipTier.max.color,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

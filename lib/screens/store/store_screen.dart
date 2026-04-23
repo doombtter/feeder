@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:feeder/core/widgets/app_snack_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -212,19 +213,34 @@ class _StoreScreenState extends State<StoreScreen>
     setState(() => _isPurchasing = false);
   }
 
-  Future<void> _restorePurchases() async {
-    setState(() => _isPurchasing = true);
-
-    _awaitingGrant = true;
+Future<void> _restorePurchases() async {
+  setState(() => _isPurchasing = true);
+  _awaitingGrant = true;
+  
+  try {
     await _purchaseService.restorePurchases();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('구매 내역을 복원했습니다')),
-      );
-      setState(() => _isPurchasing = false);
+    
+    // 약간의 여유 주고 결과 확인
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (!mounted) return;
+    
+    // _awaitingGrant는 실제 구독이 복원되면 false로 바뀜
+    // (기존 snapshot listener가 처리)
+    if (_awaitingGrant) {
+      // 2초 지났는데 아직 대기 중 = 복원할 게 없었거나 실패
+      AppSnackBar.info(context, '복원할 구매 내역이 없어요');
+    } else {
+      AppSnackBar.success(context, '구매 내역을 복원했어요');
     }
+  } catch (e) {
+    if (mounted) {
+      AppSnackBar.error(context, '복원 중 문제가 발생했어요');
+    }
+  } finally {
+    if (mounted) setState(() => _isPurchasing = false);
   }
+}
 
   // 앱 스토어 평점 페이지 열기
   Future<void> _openStoreRating() async {

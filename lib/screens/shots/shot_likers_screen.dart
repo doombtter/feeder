@@ -50,26 +50,31 @@ class _ShotLikersScreenState extends State<ShotLikersScreen> {
 
     try {
       // likes 서브컬렉션에서 좋아요한 유저 목록 조회
+      // 저장 필드명이 `createdAt`이므로 동일하게 정렬
       final likesSnapshot = await _firestore
           .collection('shots')
           .doc(widget.shotId)
           .collection('likes')
-          .orderBy('likedAt', descending: true)
+          .orderBy('createdAt', descending: true)
           .get();
 
-      final users = <_LikerUser>[];
-
-      for (final likeDoc in likesSnapshot.docs) {
+      // 유저 문서를 병렬로 가져와서 N+1 쿼리 문제 해결
+      final futures = likesSnapshot.docs.map((likeDoc) async {
         final userId = likeDoc.id;
-        final likedAt = (likeDoc.data()['likedAt'] as Timestamp?)?.toDate();
+        final likedAt = (likeDoc.data()['createdAt'] as Timestamp?)?.toDate();
 
-        // 유저 정보 조회
         final userDoc = await _firestore.collection('users').doc(userId).get();
-        if (userDoc.exists) {
-          final user = UserModel.fromFirestore(userDoc);
-          users.add(_LikerUser(user: user, likedAt: likedAt));
-        }
-      }
+        if (!userDoc.exists) return null;
+
+        final user = UserModel.fromFirestore(userDoc);
+        // 탈퇴/정지 유저는 제외
+        if (user.isDeleted) return null;
+
+        return _LikerUser(user: user, likedAt: likedAt);
+      });
+
+      final results = await Future.wait(futures);
+      final users = results.whereType<_LikerUser>().toList();
 
       if (mounted) {
         setState(() {
@@ -139,7 +144,8 @@ class _ShotLikersScreenState extends State<ShotLikersScreen> {
                     imageUrl: widget.shotThumbnailUrl!,
                     fit: BoxFit.cover,
                     placeholder: (_, __) => Container(color: AppColors.surface),
-                    errorWidget: (_, __, ___) => Container(color: AppColors.surface),
+                    errorWidget: (_, __, ___) =>
+                        Container(color: AppColors.surface),
                   ),
                 ),
               ),
@@ -163,7 +169,8 @@ class _ShotLikersScreenState extends State<ShotLikersScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
           : _likers.isEmpty
               ? _buildEmptyState()
               : RefreshIndicator(
@@ -182,7 +189,8 @@ class _ShotLikersScreenState extends State<ShotLikersScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UserProfileScreen(userId: liker.user.uid),
+                              builder: (context) =>
+                                  UserProfileScreen(userId: liker.user.uid),
                             ),
                           );
                         },
@@ -197,40 +205,88 @@ class _ShotLikersScreenState extends State<ShotLikersScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              shape: BoxShape.circle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.favorite_border_rounded,
+                size: 48,
+                color: AppColors.textTertiary,
+              ),
             ),
-            child: const Icon(
-              Icons.favorite_border_rounded,
-              size: 48,
-              color: AppColors.textTertiary,
+            const SizedBox(height: 20),
+            const Text(
+              '아직 좋아요가 없어요',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '아직 좋아요한 사람이 없어요',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+            const SizedBox(height: 8),
+            const Text(
+              '다른 유저가 좋아요를 누르면\n여기에서 누가 눌렀는지 확인할 수 있어요',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '다른 유저가 이 Shot을 좋아하면\n여기에 표시돼요',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textTertiary,
+            const SizedBox(height: 24),
+            // 가이드 팁
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                  width: 0.5,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.tips_and_updates_rounded,
+                          size: 16, color: AppColors.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        '좋아요를 받는 Tip',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '• 밝고 선명한 이미지를 사용해보세요\n'
+                    '• 음성을 추가하면 체류 시간이 길어져요\n'
+                    '• 매일 꾸준히 올리면 노출이 늘어나요',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -262,14 +318,15 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final genderColor = user.gender == 'male' ? AppColors.male : AppColors.female;
+    final genderColor =
+        user.gender == 'male' ? AppColors.male : AppColors.female;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
       ),
       child: InkWell(
         onTap: onTap,
@@ -286,7 +343,8 @@ class _UserCard extends StatelessWidget {
                     height: 56,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: genderColor.withValues(alpha:0.5), width: 2),
+                      border: Border.all(
+                          color: genderColor.withValues(alpha: 0.5), width: 2),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
@@ -294,8 +352,10 @@ class _UserCard extends StatelessWidget {
                           ? CachedNetworkImage(
                               imageUrl: user.profileImageUrl,
                               fit: BoxFit.cover,
-                              placeholder: (_, __) => Container(color: AppColors.surface),
-                              errorWidget: (_, __, ___) => _buildDefaultAvatar(genderColor),
+                              placeholder: (_, __) =>
+                                  Container(color: AppColors.surface),
+                              errorWidget: (_, __, ___) =>
+                                  _buildDefaultAvatar(genderColor),
                             )
                           : _buildDefaultAvatar(genderColor),
                     ),
@@ -326,9 +386,10 @@ class _UserCard extends StatelessWidget {
                         if (isMe) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha:0.2),
+                              color: AppColors.primary.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
@@ -348,9 +409,10 @@ class _UserCard extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: genderColor.withValues(alpha:0.15),
+                              color: genderColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -394,7 +456,7 @@ class _UserCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha:0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
@@ -413,10 +475,10 @@ class _UserCard extends StatelessWidget {
 
   Widget _buildDefaultAvatar(Color color) {
     return Container(
-      color: color.withValues(alpha:0.2),
+      color: color.withValues(alpha: 0.2),
       child: Icon(
         Icons.person_rounded,
-        color: color.withValues(alpha:0.5),
+        color: color.withValues(alpha: 0.5),
         size: 32,
       ),
     );

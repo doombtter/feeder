@@ -37,34 +37,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _userService.getUser(_uid);
   }
 
-  void _onVersionTap() {
-    final now = DateTime.now();
-
-    // 2초 내에 탭해야 카운트
-    if (_lastVersionTap != null &&
-        now.difference(_lastVersionTap!) > const Duration(seconds: 2)) {
-      _versionTapCount = 0;
-    }
-
-    _lastVersionTap = now;
-    _versionTapCount++;
-
-    if (_versionTapCount >= 7) {
-      _versionTapCount = 0;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const DevMenuScreen()),
-      );
-    } else if (_versionTapCount >= 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${7 - _versionTapCount}번 더 탭하면 개발자 메뉴가 열립니다'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
   // URL 상수
   static const _termsUrl = 'https://feeder-dc220.web.app/terms.html';
   static const _privacyUrl = 'https://feeder-dc220.web.app/privacy.html';
@@ -217,7 +189,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _buildDivider(),
               GestureDetector(
-                onTap: _onVersionTap,
                 child: _buildInfoItem(
                   icon: Icons.info_outline_rounded,
                   title: '앱 버전',
@@ -233,12 +204,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _buildSettingsCard(
             children: [
-              _buildNavItem(
-                icon: Icons.logout_rounded,
-                title: '로그아웃(production 삭제)',
-                onTap: () => _showLogoutDialog(context),
-              ),
-              _buildDivider(),
               _buildNavItem(
                 icon: Icons.delete_forever_rounded,
                 title: '회원 탈퇴',
