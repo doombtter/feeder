@@ -22,13 +22,11 @@ class MyShotFullScreen extends StatefulWidget {
 class _MyShotFullScreenState extends State<MyShotFullScreen> {
   late PageController _pageController;
   late List<ShotModel> _shots;
-  int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _shots = List.from(widget.shots);
-    _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
   }
 
@@ -46,7 +44,6 @@ class _MyShotFullScreenState extends State<MyShotFullScreen> {
         controller: _pageController,
         scrollDirection: Axis.vertical,
         itemCount: _shots.length,
-        onPageChanged: (i) => setState(() => _currentIndex = i),
         itemBuilder: (context, index) {
           return ShotItem(
             shot: _shots[index],

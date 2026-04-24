@@ -6,7 +6,7 @@ class AppConstants {
 
   // 앱 정보
   static const String appName = '피더';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.1';
 
   // 제한값
   static const int maxPostLength = 500;
@@ -16,6 +16,7 @@ class AppConstants {
   static const int minNicknameLength = 2;
   static const int maxBioLength = 100;
   static const int maxProfileImages = 3;
+  static const int dailyProfileViewLimit = 2;
 
   // 녹음 제한 (초)
   static const int maxVoiceDurationChat = 60;

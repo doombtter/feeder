@@ -22,9 +22,9 @@ class ForceUpdateScreen extends StatelessWidget {
     if (url.isEmpty) {
       // 기본 스토어 URL
       if (Platform.isIOS) {
-        url = 'https://apps.apple.com/app/id000000000'; // TODO: 실제 앱 ID로 교체
+        url = 'https://apps.apple.com/app/id6762005626';
       } else {
-        url = 'https://play.google.com/store/apps/details?id=com.example.feeder'; // TODO: 실제 패키지명으로 교체
+        url = 'https://play.google.com/store/apps/details?id=com.feeder.feeder';
       }
     }
 
@@ -200,9 +200,9 @@ class OptionalUpdateDialog extends StatelessWidget {
     
     if (url.isEmpty) {
       if (Platform.isIOS) {
-        url = 'https://apps.apple.com/app/id000000000';
+        url = 'https://apps.apple.com/app/id6762005626';
       } else {
-        url = 'https://play.google.com/store/apps/details?id=com.example.feeder';
+        url = 'https://play.google.com/store/apps/details?id=com.feeder.feeder';
       }
     }
 

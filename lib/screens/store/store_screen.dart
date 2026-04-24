@@ -11,6 +11,8 @@ import '../../core/constants/app_constants.dart';
 import '../../core/widgets/common_widgets.dart';
 import '../../core/widgets/membership_widgets.dart';
 import '../../services/purchase_service.dart';
+import 'widgets/point_product_card.dart';
+import 'widgets/policy_reward_screen.dart';
 
 class StoreScreen extends StatefulWidget {
   const StoreScreen({super.key});
@@ -31,7 +33,6 @@ class _StoreScreenState extends State<StoreScreen>
   int _currentPoints = 0;
   MembershipTier _membershipTier = MembershipTier.free;
   int _dailyFreeChats = 1;
-  bool _hasClaimedRatingReward = false;
   bool _hasClaimedPolicyReward = false;
 
   // 지급 완료 스낵바 표시용 - 이전 값과 비교해 변화 감지
@@ -105,7 +106,6 @@ class _StoreScreenState extends State<StoreScreen>
         _currentPoints = newPoints;
         _membershipTier = tier;
         _dailyFreeChats = dailyFreeChats;
-        _hasClaimedRatingReward = data['hasClaimedRatingReward'] ?? false;
         _hasClaimedPolicyReward = data['hasClaimedPolicyReward'] ?? false;
         _isLoading = false;
         _prevPoints = newPoints;
@@ -147,20 +147,6 @@ class _StoreScreenState extends State<StoreScreen>
           duration: const Duration(seconds: 3),
         ),
       );
-  }
-
-  Future<void> _loadUserData() async {
-    // 수동 새로고침용 - 대부분은 스냅샷 리스너가 자동 반영.
-    final doc = await _firestore.collection('users').doc(_uid).get();
-    if (!doc.exists || !mounted) return;
-    final data = doc.data()!;
-    setState(() {
-      _currentPoints = data['points'] ?? 0;
-      _membershipTier = parseMembershipTier(data);
-      _dailyFreeChats = data['dailyFreeChats'] ?? 1;
-      _hasClaimedRatingReward = data['hasClaimedRatingReward'] ?? false;
-      _hasClaimedPolicyReward = data['hasClaimedPolicyReward'] ?? false;
-    });
   }
 
   Future<void> _purchase(ProductDetails product) async {
@@ -242,67 +228,28 @@ Future<void> _restorePurchases() async {
   }
 }
 
-  // 앱 스토어 평점 페이지 열기
-  Future<void> _openStoreRating() async {
-    final String storeUrl;
-    if (Platform.isIOS) {
-      storeUrl = 'https://apps.apple.com/app/id123456789?action=write-review'; // TODO: 실제 앱 ID로 변경
-    } else {
-      storeUrl = 'https://play.google.com/store/apps/details?id=com.feeder.app'; // TODO: 실제 패키지명으로 변경
-    }
-    
-    final uri = Uri.parse(storeUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      
-      // 보상 지급 (최초 1회)
-      if (!_hasClaimedRatingReward) {
-        await _claimRatingReward();
-      }
-    }
-  }
+  /// 스토어 구독 관리 페이지 열기 (Apple/Google 정책 준수용).
+  ///
+  /// Apple App Store Review Guidelines 3.8(b) 및 Google Play 정책상
+  /// 자동 갱신 구독 앱은 앱 내에서 구독 관리/해지 경로를 반드시 제공해야 한다.
+  /// iOS: Apple ID 구독 관리 페이지로 이동
+  /// Android: Google Play 구독 관리 페이지로 이동
+  Future<void> _openManageSubscriptionPage() async {
+    final String url = Platform.isIOS
+        ? 'https://apps.apple.com/account/subscriptions'
+        : 'https://play.google.com/store/account/subscriptions';
 
-  Future<void> _claimRatingReward() async {
+    final uri = Uri.parse(url);
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('claimRatingReward');
-      final result = await callable.call();
-      final data = Map<String, dynamic>.from(result.data as Map);
-
-      if (data['success'] == true) {
-        final granted = (data['points'] as num?)?.toInt() ?? 70;
-        final newBalance = (data['newBalance'] as num?)?.toInt();
-
-        setState(() {
-          _currentPoints = newBalance ?? (_currentPoints + granted);
-          _hasClaimedRatingReward = true;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('🎉 평점 보상 ${granted}P가 지급되었습니다!'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-        }
-      }
-    } on FirebaseFunctionsException catch (e) {
-      if (!mounted) return;
-      final msg = e.code == 'already-exists'
-          ? '이미 평점 보상을 수령하셨습니다'
-          : '보상 수령 실패: ${e.message ?? e.code}';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppColors.error),
-      );
-      // 이미 수령 케이스는 상태 동기화
-      if (e.code == 'already-exists') {
-        setState(() => _hasClaimedRatingReward = true);
+      final success =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!success && mounted) {
+        AppSnackBar.error(context, '구독 관리 페이지를 열 수 없어요');
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('보상 수령 실패: $e'), backgroundColor: AppColors.error),
-      );
+      if (mounted) {
+        AppSnackBar.error(context, '구독 관리 페이지를 열 수 없어요');
+      }
     }
   }
 
@@ -310,7 +257,7 @@ Future<void> _restorePurchases() async {
     // 앱 정책 화면으로 이동
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const _PolicyRewardScreen()),
+      MaterialPageRoute(builder: (context) => const PolicyRewardScreen()),
     );
 
     if (_hasClaimedPolicyReward) return;
@@ -564,18 +511,6 @@ Future<void> _restorePurchases() async {
           ),
           const SizedBox(height: 12),
 
-          // 평점 남기기
-          _buildRewardCard(
-            icon: Icons.star_rounded,
-            iconColor: const Color(0xFFFFD700),
-            title: '앱 평점 남기기',
-            subtitle: Platform.isIOS ? 'App Store에서 평점 남기기' : 'Play Store에서 평점 남기기',
-            reward: 70,
-            isClaimed: _hasClaimedRatingReward,
-            onTap: _openStoreRating,
-          ),
-          const SizedBox(height: 10),
-
           // 앱 정책 확인
           _buildRewardCard(
             icon: Icons.gavel_rounded,
@@ -611,7 +546,7 @@ Future<void> _restorePurchases() async {
               productDetails = null;
             }
 
-            return _PointProductCard(
+            return PointProductCard(
               product: product,
               price: price,
               onPurchase: canPurchase && productDetails != null
@@ -922,6 +857,11 @@ Future<void> _restorePurchases() async {
             ),
           ),
 
+          const SizedBox(height: 8),
+
+          // 구독 관리 버튼 (Apple/Google 정책 필수)
+          _buildManageSubscriptionTile(),
+
           const SizedBox(height: 16),
 
           Container(
@@ -936,7 +876,7 @@ Future<void> _restorePurchases() async {
               children: [
                 _buildInfoRow('구독은 자동으로 갱신됩니다'),
                 const SizedBox(height: 8),
-                _buildInfoRow('언제든지 설정에서 해지할 수 있어요'),
+                _buildInfoRow('위 "구독 관리하기"에서 언제든 해지할 수 있어요'),
                 const SizedBox(height: 8),
                 _buildInfoRow('갱신일 24시간 전에 해지해야 다음 결제를 막을 수 있어요'),
               ],
@@ -959,6 +899,70 @@ Future<void> _restorePurchases() async {
           ),
         ),
       ],
+    );
+  }
+
+  /// 스토어 구독 관리 페이지로 연결하는 타일.
+  /// Apple/Google 정책상 자동갱신 구독 앱은 반드시 이 링크를 제공해야 함.
+  Widget _buildManageSubscriptionTile() {
+    return InkWell(
+      onTap: _openManageSubscriptionPage,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.manage_accounts_rounded,
+                color: AppColors.primary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '구독 관리하기',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    '구독 내역 확인 및 해지',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.open_in_new_rounded,
+              color: AppColors.textTertiary,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1305,6 +1309,11 @@ Future<void> _restorePurchases() async {
               child: const Text('구매 내역 복원', style: TextStyle(color: AppColors.textSecondary)),
             ),
           ),
+          const SizedBox(height: 8),
+
+          // 구독 관리 버튼 (Apple/Google 정책 필수)
+          _buildManageSubscriptionTile(),
+
           const SizedBox(height: 16),
 
           Container(
@@ -1319,7 +1328,7 @@ Future<void> _restorePurchases() async {
               children: [
                 _buildInfoRow('구독은 자동으로 갱신됩니다'),
                 const SizedBox(height: 8),
-                _buildInfoRow('언제든 구독을 취소할 수 있습니다'),
+                _buildInfoRow('위 "구독 관리하기"에서 언제든 해지할 수 있어요'),
                 const SizedBox(height: 8),
                 _buildInfoRow('프리미엄에서 업그레이드 시 차액만 결제됩니다'),
               ],
@@ -1504,282 +1513,6 @@ Future<void> _restorePurchases() async {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PointProductCard extends StatelessWidget {
-  final PointProduct product;
-  final String? price;
-  final VoidCallback? onPurchase;
-  final bool isStoreAvailable;
-
-  const _PointProductCard({
-    required this.product,
-    required this.price,
-    required this.onPurchase,
-    this.isStoreAvailable = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFD700).withValues(alpha:0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.diamond_rounded, color: Color(0xFFFFD700), size: 26),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        '${product.points}P',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (product.bonusPoints > 0) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppColors.error,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '+${product.bonusPoints}P',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (product.bonusPoints > 0)
-                    Text(
-                      '총 ${product.totalPoints}P',
-                      style: const TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 12,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: onPurchase,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  price ?? '로딩중',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// 정책 확인 보상 화면 (간단한 정책 요약)
-class _PolicyRewardScreen extends StatelessWidget {
-  const _PolicyRewardScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('앱 정책'),
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: const Icon(Icons.arrow_back_ios_rounded, size: 16),
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // 보상 안내
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.card_giftcard, color: Colors.white, size: 28),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '정책 확인 보상',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          '아래 내용을 확인하면 50P를 받을 수 있어요!',
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            _buildPolicyItem(
-              icon: Icons.gavel_rounded,
-              title: '이용 정지 정책',
-              content: '커뮤니티 가이드라인 위반 시 1일~영구 정지가 부과될 수 있습니다.',
-            ),
-            _buildPolicyItem(
-              icon: Icons.security_rounded,
-              title: '불법 콘텐츠 대응',
-              content: '불법 콘텐츠는 즉시 삭제되며, 수사기관에 협조합니다.',
-            ),
-            _buildPolicyItem(
-              icon: Icons.repeat_rounded,
-              title: '동일 내용 반복 제한',
-              content: '도배성 글, 댓글은 삭제되며 정지 사유가 됩니다.',
-            ),
-            _buildPolicyItem(
-              icon: Icons.link_off_rounded,
-              title: '링크 및 광고 제한',
-              content: '외부 링크, 연락처 공유, 광고성 게시물이 금지됩니다.',
-            ),
-
-            const SizedBox(height: 24),
-
-            // 확인 버튼
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  '확인했어요',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPolicyItem({
-    required IconData icon,
-    required String title,
-    required String content,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha:0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  content,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

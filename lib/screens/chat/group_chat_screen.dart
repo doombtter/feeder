@@ -2,9 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
-import '../../services/chat_service.dart';
 import '../../services/user_service.dart';
 import '../../models/user_model.dart';
 import 'chat_request_dialog.dart';
@@ -582,33 +580,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         toUserNickname: anonymousName,
         toUserGender: gender,
         fromUser: _currentUser!,
-      ),
-    );
-  }
-
-  Widget _buildAvatar(String? profileUrl, String gender) {
-    if (profileUrl != null && profileUrl.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: profileUrl,
-        imageBuilder: (context, imageProvider) => CircleAvatar(
-          radius: 18,
-          backgroundImage: imageProvider,
-        ),
-        placeholder: (context, url) => _buildDefaultAvatar(gender),
-        errorWidget: (context, url, error) => _buildDefaultAvatar(gender),
-      );
-    }
-    return _buildDefaultAvatar(gender);
-  }
-
-  Widget _buildDefaultAvatar(String gender) {
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: gender == 'male' ? AppColors.maleBg : AppColors.femaleBg,
-      child: Icon(
-        Icons.person,
-        size: 18,
-        color: gender == 'male' ? AppColors.male : AppColors.female,
       ),
     );
   }

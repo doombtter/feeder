@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:feeder/core/constants/app_constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
@@ -349,7 +350,7 @@ class UserService {
       }
     }
     
-    const dailyLimit = 2; // MAX 유저 일일 프로필 조회 한도
+    const dailyLimit = AppConstants.dailyProfileViewLimit;
     final remaining = dailyLimit - usedToday;
     
     return (canView: remaining > 0, remaining: remaining, used: usedToday);

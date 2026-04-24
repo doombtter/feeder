@@ -44,7 +44,6 @@ class ShotService {
 
   // 이미 본 Shots 목록 (다시보기용)
   Future<List<ShotModel>> getViewedShots(String userId) async {
-    final now = DateTime.now();
 
     // 내가 조회한 shot ID 목록
     final viewedSnapshot = await _firestore
@@ -61,8 +60,8 @@ class ShotService {
     final List<ShotModel> viewedShots = [];
     
     // Firestore whereIn은 최대 10개까지만 지원하므로 배치로 처리
-    for (int i = 0; i < viewedIds.length; i += 10) {
-      final batchIds = viewedIds.skip(i).take(10).toList();
+    for (int i = 0; i < viewedIds.length; i += 30) {
+      final batchIds = viewedIds.skip(i).take(30).toList();
       final shotsSnapshot = await _firestore
           .collection('shots')
           .where(FieldPath.documentId, whereIn: batchIds)

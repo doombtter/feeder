@@ -3,11 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
-import '../../core/widgets/membership_widgets.dart';
 import '../../services/suspension_service.dart';
 import '../../services/user_service.dart';
 import 'blocked_users_screen.dart';
-import 'dev_menu_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,9 +19,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _firestore = FirebaseFirestore.instance;
   final _suspensionService = SuspensionService();
   final _userService = UserService();
-
-  int _versionTapCount = 0;
-  DateTime? _lastVersionTap;
 
   @override
   void initState() {
@@ -40,17 +35,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // URL 상수
   static const _termsUrl = 'https://feeder-dc220.web.app/terms.html';
   static const _privacyUrl = 'https://feeder-dc220.web.app/privacy.html';
-  static const _policyUrl = 'https://feeder-dc220.web.app/policy.html';
   static const _supportEmail = 'feederadmin@gmail.com';
 
   Future<void> _launchUrl(String url) async {
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (mounted) {
+
+    try {
+      final success = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('링크를 열 수 없습니다')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('링크를 여는 중 오류가 발생했습니다')),
         );
       }
     }
@@ -192,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: _buildInfoItem(
                   icon: Icons.info_outline_rounded,
                   title: '앱 버전',
-                  value: '1.0.1',
+                  value: AppConstants.appVersion,
                 ),
               ),
             ],
@@ -237,7 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
       ),
       child: Column(children: children),
     );
@@ -248,7 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       height: 1,
       thickness: 1,
       indent: 64,
-      color: AppColors.border.withValues(alpha:0.3),
+      color: AppColors.border.withValues(alpha: 0.3),
     );
   }
 
@@ -270,7 +274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: (titleColor ?? AppColors.primary).withValues(alpha:0.1),
+                color: (titleColor ?? AppColors.primary).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child:
@@ -326,7 +330,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.textSecondary.withValues(alpha:0.1),
+              color: AppColors.textSecondary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: AppColors.textSecondary, size: 18),
@@ -348,93 +352,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               fontSize: 14,
               color: AppColors.textTertiary,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSwitchItem({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-    Color? iconColor,
-  }) {
-    final color = iconColor ?? AppColors.primary;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha:0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeColor: AppColors.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:
-            const Text('로그아웃', style: TextStyle(color: AppColors.textPrimary)),
-        content: const Text(
-          '정말 로그아웃 하시겠습니까?',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소',
-                style: TextStyle(color: AppColors.textTertiary)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
-            },
-            child:
-                const Text('로그아웃', style: TextStyle(color: AppColors.primary)),
           ),
         ],
       ),
@@ -720,8 +637,8 @@ class _NotificationSettingsScreenState
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(16),
-                    border:
-                        Border.all(color: AppColors.border.withValues(alpha:0.5)),
+                    border: Border.all(
+                        color: AppColors.border.withValues(alpha: 0.5)),
                   ),
                   child: Column(
                     children: [
@@ -781,7 +698,7 @@ class _NotificationSettingsScreenState
       height: 1,
       thickness: 1,
       indent: 64,
-      color: AppColors.border.withValues(alpha:0.3),
+      color: AppColors.border.withValues(alpha: 0.3),
     );
   }
 
@@ -802,7 +719,7 @@ class _NotificationSettingsScreenState
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withValues(alpha:0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -876,9 +793,10 @@ class AppPolicyScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha:0.1),
+              color: AppColors.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primary.withValues(alpha:0.3)),
+              border:
+                  Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -949,7 +867,8 @@ class AppPolicyScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
+              border:
+                  Border.all(color: AppColors.border.withValues(alpha: 0.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -987,7 +906,7 @@ class AppPolicyScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1000,7 +919,7 @@ class AppPolicyScreen extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha:0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: AppColors.primary, size: 18),
@@ -1017,7 +936,7 @@ class AppPolicyScreen extends StatelessWidget {
               ],
             ),
           ),
-          Divider(height: 1, color: AppColors.border.withValues(alpha:0.3)),
+          Divider(height: 1, color: AppColors.border.withValues(alpha: 0.3)),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

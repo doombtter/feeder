@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -8,7 +9,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 //   true  → 테스트 광고 (개발/QA 중)
 //   false → 실제 광고  (출시 빌드)
 // ════════════════════════════════════════════════════════════════
-const bool _useTestAds = false;
+const bool _useTestAds = true;
 
 // ── Android 광고 단위 ID ──────────────────────────────────────
 const _android = (
@@ -18,19 +19,19 @@ const _android = (
   ),
   banner: (
     test: 'ca-app-pub-3940256099942544/6300978111',
-    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 배너 ID
+    prod: 'ca-app-pub-8966373226580964/7711922959', // ← 실제 배너 ID
   ),
   interstitial: (
     test: 'ca-app-pub-3940256099942544/1033173712',
-    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 전면 ID
+    prod: 'ca-app-pub-8966373226580964/5636423952', // ← 실제 전면 ID
   ),
   native: (
     test: 'ca-app-pub-3940256099942544/2247696110',
-    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 네이티브 ID
+    prod: 'ca-app-pub-8966373226580964/6723334408', // ← 실제 네이티브 ID
   ),
   rewarded: (
     test: 'ca-app-pub-3940256099942544/5224354917',
-    prod: 'ca-app-pub-8966373226580964~7819424738', // ← 실제 리워드 ID
+    prod: 'ca-app-pub-8966373226580964/5085759619', // ← 실제 리워드 ID
   ),
 );
 
@@ -42,19 +43,19 @@ const _ios = (
   ),
   banner: (
     test: 'ca-app-pub-3940256099942544/2934735716',
-    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 배너 ID
+    prod: 'ca-app-pub-8966373226580964/4103850432', // ← 실제 배너 ID
   ),
   interstitial: (
     test: 'ca-app-pub-3940256099942544/4411468910',
-    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 전면 ID
+    prod: 'ca-app-pub-8966373226580964/2459596274', // ← 실제 전면 ID
   ),
   native: (
     test: 'ca-app-pub-3940256099942544/3986624511',
-    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 네이티브 ID
+    prod: 'ca-app-pub-8966373226580964/1626920392', // ← 실제 네이티브 ID
   ),
   rewarded: (
     test: 'ca-app-pub-3940256099942544/1712485313',
-    prod: 'ca-app-pub-8966373226580964~1969491747', // ← 실제 리워드 ID
+    prod: 'ca-app-pub-8966373226580964/3761082961', // ← 실제 리워드 ID
   ),
 );
 
@@ -83,13 +84,16 @@ class AdMobService {
 
   // ── 초기화 ───────────────────────────────────────────────────
   static Future<void> initialize() async {
+    if (Platform.isIOS) {
+      // 플랫폼 가드
+      final status = await AppTrackingTransparency.trackingAuthorizationStatus;
+      if (status == TrackingStatus.notDetermined) {
+        // UI가 준비된 후 호출하는 것이 권장됨 (WidgetsBinding 활용)
+        await Future.delayed(const Duration(milliseconds: 200));
+        await AppTrackingTransparency.requestTrackingAuthorization();
+      }
+    }
     await MobileAds.instance.initialize();
-    MobileAds.instance.updateRequestConfiguration(
-      RequestConfiguration(
-        testDeviceIds: ['8362D77ED6E3D0D8019ECCABB77D0CAD'],
-      ),
-    );
-    debugPrint('AdMob 초기화 완료 [${_useTestAds ? "테스트 모드" : "프로덕션 모드"}]');
   }
 
   // ── 배너 광고 ────────────────────────────────────────────────

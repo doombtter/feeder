@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,7 +11,6 @@ import 'services/admob_service.dart';
 import 'services/device_service.dart';
 import 'services/post_service.dart';
 import 'services/purchase_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 // Core
@@ -67,7 +65,7 @@ void main() async {
 
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
-  AdMobService.initialize();
+  await AdMobService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // 💰 인앱 결제 초기화 (purchaseStream 리스너를 앱 시작 시 활성화)
@@ -79,26 +77,7 @@ void main() async {
 
   final fcm = FirebaseMessaging.instance;
   await fcm.requestPermission();
-  
-  String? apnsToken;
-  String? fcmToken;
 
-  try {
-    if (Platform.isIOS) {
-      apnsToken = await fcm.getAPNSToken();
-    }
-    fcmToken = await fcm.getToken();
-  } catch (e) {
-    debugPrint('FCM 토큰 오류 (무시): $e');
-  }
-  
-  // Firestore에 저장
-  await FirebaseFirestore.instance.collection('debug_logs').add({
-    'apnsToken': apnsToken,
-    'fcmToken': fcmToken,
-    'platform': Platform.isIOS ? 'iOS' : 'Android',
-    'timestamp': FieldValue.serverTimestamp(),
-  });
   runApp(const FeederApp());
 }
 
@@ -319,7 +298,6 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   late final Stream<User?> _authStream;
-  final _deviceService = DeviceService();
 
   // 새 로그인(소셜 로그인 직접 수행)인지 여부
   static bool _isNewLogin = false;
@@ -538,21 +516,43 @@ class _ProfileCheckWrapperState extends State<ProfileCheckWrapper> {
 
         final user = snapshot.data;
 
-        // 탈퇴한 사용자 체크
-        if (user != null && user.isDeleted) {
-          // 탈퇴한 계정으로 로그인 시도 → 강제 로그아웃
+        // null이면 그냥 아무것도 안그림
+        if (user == null) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('유저 정보를 불러올 수 없습니다'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await FirebaseAuth.instance.signOut();
+                    },
+                    child: Text('다시 로그인하기'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 탈퇴한 사용자
+        if (user.isDeleted) {
           WidgetsBinding.instance.addPostFrameCallback((_) async {
             await FirebaseAuth.instance.signOut();
           });
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            body: const Center(
+
+          return const Scaffold(
+            body: Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             ),
           );
         }
 
-        if (user == null || !user.isProfileComplete) {
+        // 프로필 미완성
+        if (!user.isProfileComplete) {
           return const ProfileSetupScreen();
         }
 

@@ -1,13 +1,15 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_constants.dart';
 import '../../main.dart' show AuthWrapper;
 
 /// 1단계: 소셜 로그인 화면 (필수)
-/// 
+///
 /// 플로우:
 /// 1. Google 또는 Apple로 로그인 (필수)
 /// 2. PhoneLinkScreen으로 이동하여 전화번호 연동
@@ -24,10 +26,24 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
   String? _loadingProvider;
   bool _googleInitialized = false;
 
+  final _termsRecognizer = TapGestureRecognizer();
+  final _privacyRecognizer = TapGestureRecognizer();
+  static const _termsUrl = 'https://feeder-dc220.web.app/terms.html';
+  static const _privacyUrl = 'https://feeder-dc220.web.app/privacy.html';
+
   @override
   void initState() {
     super.initState();
+    _termsRecognizer.onTap = () => launchUrl(Uri.parse(_termsUrl));
+    _privacyRecognizer.onTap = () => launchUrl(Uri.parse(_privacyUrl));
     _initGoogleSignIn();
+  }
+
+  @override
+  void dispose() {
+    _termsRecognizer.dispose();
+    _privacyRecognizer.dispose();
+    super.dispose();
   }
 
   Future<void> _initGoogleSignIn() async {
@@ -54,14 +70,15 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
 
       // 1. 인증 수행 (사용자 선택)
       final googleUser = await GoogleSignIn.instance.authenticate();
-      
+
       // 2. idToken 가져오기 (authentication에서)
       final idToken = googleUser.authentication.idToken;
-      
+
       // 3. accessToken 가져오기 (authorizationClient에서)
       final List<String> scopes = ['email', 'profile'];
-      final authorization = await googleUser.authorizationClient.authorizeScopes(scopes);
-      
+      final authorization =
+          await googleUser.authorizationClient.authorizeScopes(scopes);
+
       // 4. Firebase Credential 생성
       final credential = GoogleAuthProvider.credential(
         idToken: idToken,
@@ -69,11 +86,12 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
       );
 
       // 5. Firebase에 로그인
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-      
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
       // 새 로그인 표시 (전화번호 인증 필요)
       AuthWrapper.markNewLogin();
-      
+
       if (mounted) {
         _proceedToPhoneLink(userCredential.user!);
       }
@@ -117,11 +135,12 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
       );
 
       // Firebase에 로그인
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
-      
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+
       // 새 로그인 표시 (전화번호 인증 필요)
       AuthWrapper.markNewLogin();
-      
+
       if (mounted) {
         _proceedToPhoneLink(userCredential.user!);
       }
@@ -130,7 +149,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
         _isLoading = false;
         _loadingProvider = null;
       });
-      
+
       // 사용자 취소는 에러 표시하지 않음
       if (e.code != AuthorizationErrorCode.canceled) {
         _showError('Apple 로그인에 실패했습니다');
@@ -173,7 +192,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 60),
-              
+
               // 로고
               Container(
                 width: 64,
@@ -183,7 +202,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withValues(alpha:0.3),
+                      color: AppColors.primary.withValues(alpha: 0.3),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -196,7 +215,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               const Text(
                 '피더',
                 style: TextStyle(
@@ -213,9 +232,9 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   color: AppColors.textSecondary,
                 ),
               ),
-              
+
               const Spacer(),
-              
+
               // 단계 안내
               Container(
                 padding: const EdgeInsets.all(16),
@@ -234,9 +253,9 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 10),
-              
+
               Center(
                 child: Text(
                   '계정 선택 → 전화번호 → 인증번호',
@@ -246,9 +265,9 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 4),
-              
+
               Center(
                 child: Text(
                   '1/3 계정 선택',
@@ -259,9 +278,9 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               // Google 로그인
               _SocialButton(
                 onPressed: _isLoading ? null : _signInWithGoogle,
@@ -271,9 +290,9 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                 backgroundColor: Colors.white,
                 textColor: Colors.black87,
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               // Apple 로그인
               if (Platform.isIOS) ...[
                 _SocialButton(
@@ -299,9 +318,9 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   ),
                 ),
               ],
-              
+
               const SizedBox(height: 32),
-              
+
               // 이용약관
               Center(
                 child: Text.rich(
@@ -318,6 +337,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                           color: AppColors.primary,
                           decoration: TextDecoration.underline,
                         ),
+                        recognizer: _termsRecognizer
                       ),
                       const TextSpan(text: ' 및 '),
                       TextSpan(
@@ -326,6 +346,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                           color: AppColors.primary,
                           decoration: TextDecoration.underline,
                         ),
+                        recognizer: _privacyRecognizer
                       ),
                       const TextSpan(text: '에\n동의하게 됩니다.'),
                     ],
@@ -333,7 +354,7 @@ class _SocialLoginScreenState extends State<SocialLoginScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              
+
               const SizedBox(height: 16),
             ],
           ),
@@ -474,10 +495,10 @@ class _GoogleLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final double s = size.width / 24;
-    
+
     // Google G 로고
     final Path path = Path();
-    
+
     // 파란색 부분
     final Paint bluePaint = Paint()..color = const Color(0xFF4285F4);
     path.moveTo(21.6 * s, 12.2 * s);
@@ -491,7 +512,7 @@ class _GoogleLogoPainter extends CustomPainter {
     path.cubicTo(20.5 * s, 17.8 * s, 21.6 * s, 15.2 * s, 21.6 * s, 12.2 * s);
     path.close();
     canvas.drawPath(path, bluePaint);
-    
+
     // 녹색 부분
     final Paint greenPaint = Paint()..color = const Color(0xFF34A853);
     final Path greenPath = Path();
@@ -505,7 +526,7 @@ class _GoogleLogoPainter extends CustomPainter {
     greenPath.cubicTo(4.7 * s, 19.4 * s, 8.1 * s, 22 * s, 12 * s, 22 * s);
     greenPath.close();
     canvas.drawPath(greenPath, greenPaint);
-    
+
     // 노란색 부분
     final Paint yellowPaint = Paint()..color = const Color(0xFFFBBC05);
     final Path yellowPath = Path();
@@ -519,7 +540,7 @@ class _GoogleLogoPainter extends CustomPainter {
     yellowPath.lineTo(6.4 * s, 13.6 * s);
     yellowPath.close();
     canvas.drawPath(yellowPath, yellowPaint);
-    
+
     // 빨간색 부분
     final Paint redPaint = Paint()..color = const Color(0xFFEA4335);
     final Path redPath = Path();

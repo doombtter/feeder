@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/constants/app_constants.dart';
-import '../../core/widgets/membership_widgets.dart';
 import '../../models/user_model.dart';
 import '../chat/chat_request_dialog.dart';
 import '../profile/user_profile_screen.dart';

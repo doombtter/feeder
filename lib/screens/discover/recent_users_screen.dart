@@ -16,17 +16,18 @@ class RecentUsersScreen extends StatefulWidget {
   State<RecentUsersScreen> createState() => _RecentUsersScreenState();
 }
 
-class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTickerProviderStateMixin {
+class _RecentUsersScreenState extends State<RecentUsersScreen>
+    with SingleTickerProviderStateMixin {
   final _userService = UserService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
-  
+
   late TabController _tabController;
-  
+
   List<UserModel> _onlineUsers = [];
   List<UserModel> _recentUsers = [];
   bool _isLoadingOnline = true;
   bool _isLoadingRecent = true;
-  
+
   String? _genderFilter; // null: 전체, 'male', 'female'
   UserModel? _currentUser;
   MembershipTier _membershipTier = MembershipTier.free;
@@ -55,7 +56,7 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
     if (mounted && user != null) {
       setState(() {
         _currentUser = user;
-        _membershipTier = user.isPremium 
+        _membershipTier = user.isPremium
             ? (user.isMax ? MembershipTier.max : MembershipTier.premium)
             : MembershipTier.free;
       });
@@ -69,10 +70,12 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
         currentUid: _uid,
         genderFilter: _genderFilter,
       );
-      if (mounted) setState(() {
-        _onlineUsers = users;
-        _isLoadingOnline = false;
-      });
+      if (mounted) {
+        setState(() {
+          _onlineUsers = users;
+          _isLoadingOnline = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoadingOnline = false);
     }
@@ -85,10 +88,12 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
         currentUid: _uid,
         genderFilter: _genderFilter,
       );
-      if (mounted) setState(() {
-        _recentUsers = users;
-        _isLoadingRecent = false;
-      });
+      if (mounted) {
+        setState(() {
+          _recentUsers = users;
+          _isLoadingRecent = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoadingRecent = false);
     }
@@ -96,7 +101,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   void _setGenderFilter(String? gender) {
     // 프리미엄/MAX만 성별 필터 사용 가능
-    if (gender != null && !MembershipBenefits.hasGenderFilter(_membershipTier)) {
+    if (gender != null &&
+        !MembershipBenefits.hasGenderFilter(_membershipTier)) {
       _showPremiumRequiredDialog();
       return;
     }
@@ -115,7 +121,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
           children: [
             Icon(Icons.diamond_rounded, color: MembershipTier.premium.color),
             const SizedBox(width: 8),
-            const Text('프리미엄 전용', style: TextStyle(color: AppColors.textPrimary)),
+            const Text('프리미엄 전용',
+                style: TextStyle(color: AppColors.textPrimary)),
           ],
         ),
         content: const Text(
@@ -125,7 +132,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('닫기', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text('닫기',
+                style: TextStyle(color: AppColors.textTertiary)),
           ),
           TextButton(
             onPressed: () {
@@ -135,7 +143,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
                 MaterialPageRoute(builder: (context) => const StoreScreen()),
               );
             },
-            child: Text('구독하기', style: TextStyle(color: MembershipTier.premium.color)),
+            child: Text('구독하기',
+                style: TextStyle(color: MembershipTier.premium.color)),
           ),
         ],
       ),
@@ -151,7 +160,7 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   void _showChatRequestDialog(UserModel targetUser) {
     if (_currentUser == null) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => ChatRequestDialog(
@@ -165,10 +174,10 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   String _getLastSeenText(DateTime? lastSeen) {
     if (lastSeen == null) return '';
-    
+
     final now = DateTime.now();
     final diff = now.difference(lastSeen);
-    
+
     if (diff.inMinutes < 1) return '방금 전';
     if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
     if (diff.inHours < 24) return '${diff.inHours}시간 전';
@@ -184,7 +193,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: const Text('접속 중인 사람들', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('접속 중인 사람들',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         leading: IconButton(
           icon: Container(
             padding: const EdgeInsets.all(8),
@@ -203,7 +213,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
             children: [
               // 성별 필터
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
                     _buildFilterChip('전체', null),
@@ -221,7 +232,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
                 indicatorWeight: 2,
                 labelColor: AppColors.textPrimary,
                 unselectedLabelColor: AppColors.textTertiary,
-                labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                labelStyle:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 tabs: [
                   Tab(text: '지금 온라인 (${_onlineUsers.length})'),
                   Tab(text: '최근 접속 (${_recentUsers.length})'),
@@ -246,23 +258,23 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
     final isPremiumFilter = value != null;
     final canUseFilter = MembershipBenefits.hasGenderFilter(_membershipTier);
     final isLocked = isPremiumFilter && !canUseFilter;
-    
+
     Color chipColor = AppColors.card;
     Color textColor = AppColors.textSecondary;
-    
+
     if (isSelected) {
       if (value == 'male') {
-        chipColor = AppColors.male.withValues(alpha:0.2);
+        chipColor = AppColors.male.withValues(alpha: 0.2);
         textColor = AppColors.male;
       } else if (value == 'female') {
-        chipColor = AppColors.female.withValues(alpha:0.2);
+        chipColor = AppColors.female.withValues(alpha: 0.2);
         textColor = AppColors.female;
       } else {
-        chipColor = AppColors.primary.withValues(alpha:0.2);
+        chipColor = AppColors.primary.withValues(alpha: 0.2);
         textColor = AppColors.primary;
       }
     }
-    
+
     return GestureDetector(
       onTap: () => _setGenderFilter(value),
       child: Container(
@@ -271,7 +283,9 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
           color: chipColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? textColor.withValues(alpha:0.5) : AppColors.border,
+            color: isSelected
+                ? textColor.withValues(alpha: 0.5)
+                : AppColors.border,
           ),
         ),
         child: Row(
@@ -301,7 +315,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   Widget _buildOnlineTab() {
     if (_isLoadingOnline) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.primary));
     }
 
     if (_onlineUsers.isEmpty) {
@@ -322,7 +337,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => UserProfileScreen(userId: _onlineUsers[index].uid),
+                builder: (context) =>
+                    UserProfileScreen(userId: _onlineUsers[index].uid),
               ),
             ),
             onChatRequest: () => _showChatRequestDialog(_onlineUsers[index]),
@@ -334,7 +350,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
 
   Widget _buildRecentTab() {
     if (_isLoadingRecent) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.primary));
     }
 
     if (_recentUsers.isEmpty) {
@@ -352,7 +369,8 @@ class _RecentUsersScreenState extends State<RecentUsersScreen> with SingleTicker
           return _UserCard(
             user: user,
             isOnline: user.isOnline,
-            lastSeenText: user.isOnline ? null : _getLastSeenText(user.lastSeenAt),
+            lastSeenText:
+                user.isOnline ? null : _getLastSeenText(user.lastSeenAt),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -412,7 +430,8 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final genderColor = user.gender == 'male' ? AppColors.male : AppColors.female;
+    final genderColor =
+        user.gender == 'male' ? AppColors.male : AppColors.female;
 
     return GestureDetector(
       onTap: onTap,
@@ -422,7 +441,7 @@ class _UserCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border.withValues(alpha:0.5)),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
         ),
         child: Row(
           children: [
@@ -443,16 +462,19 @@ class _UserCard extends StatelessWidget {
                             fit: BoxFit.cover,
                             placeholder: (context, url) => Container(
                               color: AppColors.surface,
-                              child: Icon(Icons.person, color: AppColors.textTertiary),
+                              child: Icon(Icons.person,
+                                  color: AppColors.textTertiary),
                             ),
                             errorWidget: (context, url, error) => Container(
                               color: AppColors.surface,
-                              child: Icon(Icons.person, color: AppColors.textTertiary),
+                              child: Icon(Icons.person,
+                                  color: AppColors.textTertiary),
                             ),
                           )
                         : Container(
                             color: AppColors.surface,
-                            child: Icon(Icons.person, color: AppColors.textTertiary, size: 28),
+                            child: Icon(Icons.person,
+                                color: AppColors.textTertiary, size: 28),
                           ),
                   ),
                 ),
@@ -491,9 +513,10 @@ class _UserCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: genderColor.withValues(alpha:0.1),
+                          color: genderColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -510,12 +533,14 @@ class _UserCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Icon(Icons.location_on_outlined, size: 14, color: AppColors.textTertiary),
+                      Icon(Icons.location_on_outlined,
+                          size: 14, color: AppColors.textTertiary),
                       const SizedBox(width: 2),
                       Flexible(
                         child: Text(
                           user.displayLocation,
-                          style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                          style: TextStyle(
+                              color: AppColors.textTertiary, fontSize: 13),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -533,15 +558,18 @@ class _UserCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           lastSeenText!,
-                          style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                          style: TextStyle(
+                              color: AppColors.textTertiary, fontSize: 13),
                         ),
                       ],
                       if (isOnline && lastSeenText == null) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF22C55E).withValues(alpha:0.1),
+                            color:
+                                const Color(0xFF22C55E).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
@@ -562,7 +590,8 @@ class _UserCard extends StatelessWidget {
                       user.bio,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 13),
                     ),
                   ],
                 ],
@@ -573,7 +602,8 @@ class _UserCard extends StatelessWidget {
             GestureDetector(
               onTap: onChatRequest,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   gradient: AppColors.primaryGradient,
                   borderRadius: BorderRadius.circular(10),
@@ -581,7 +611,8 @@ class _UserCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
-                    Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 16),
+                    Icon(Icons.chat_bubble_outline_rounded,
+                        color: Colors.white, size: 16),
                     SizedBox(width: 4),
                     Text(
                       '채팅',

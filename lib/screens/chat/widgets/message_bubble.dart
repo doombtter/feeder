@@ -69,12 +69,6 @@ class _MessageBubbleState extends State<MessageBubble> {
     }
   }
 
-  // 더 이상 사용하지 않음 - 열람 즉시 만료되므로 시간 체크 불필요
-  void _checkEphemeralExpiry() {
-    // 이미 열람되었으면 즉시 만료
-    _ephemeralExpired = true;
-  }
-
   Future<void> _initPlayer() async {
     try {
       _player = FlutterSoundPlayer();
@@ -379,7 +373,6 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Widget _buildEphemeralBubble() {
-    final isImage = widget.message.type == MessageType.image;
     final isVideo = widget.message.type == MessageType.video;
     
     // 만료된 시크릿 메시지

@@ -56,7 +56,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   
   // 새 메시지 알림 버튼 관련
   bool _showNewMessageButton = false;
-  int _newMessageCount = 0;
   bool _isAtBottom = true;
 
   @override
@@ -94,9 +93,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _startListeningNewMessages() {
-    if (_newestMessageTime == null) {
-      _newestMessageTime = DateTime.now();
-    }
+    _newestMessageTime ??= DateTime.now();
     
     _newMessagesSubscription?.cancel();
     _newMessagesSubscription = _chatService
@@ -117,7 +114,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           // 맨 아래가 아닐 때 새 메시지가 오면 버튼 표시
           if (!_isAtBottom && hasNewFromOther) {
             _showNewMessageButton = true;
-            _newMessageCount += newMessages.where((m) => m.senderId != _uid).length;
           }
         });
         
@@ -163,7 +159,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         _isAtBottom = isAtBottom;
         if (isAtBottom) {
           _showNewMessageButton = false;
-          _newMessageCount = 0;
         }
       });
     }
@@ -182,7 +177,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
     setState(() {
       _showNewMessageButton = false;
-      _newMessageCount = 0;
     });
   }
 

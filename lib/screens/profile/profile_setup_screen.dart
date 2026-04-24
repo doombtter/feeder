@@ -8,7 +8,6 @@ import '../../core/widgets/image_picker_helper.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/s3_service.dart';
-import '../../models/user_model.dart';
 import '../feed/home_screen.dart';
 
 /// 프로필 저장 후 HomeScreen으로 이동하는 래퍼
