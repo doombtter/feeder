@@ -8,7 +8,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 //   true  → 테스트 광고 (개발/QA 중)
 //   false → 실제 광고  (출시 빌드)
 // ════════════════════════════════════════════════════════════════
-const bool _useTestAds = false;
+const bool _useTestAds = true;
 
 // ── Android 광고 단위 ID ──────────────────────────────────────
 const _android = (
