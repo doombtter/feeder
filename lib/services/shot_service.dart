@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/shot_model.dart';
+import 'report_service.dart';
 
 class ShotService {
   // 싱글톤 패턴
@@ -8,6 +9,7 @@ class ShotService {
   ShotService._internal();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ReportService _reportService = ReportService();
 
   // 활성 Shots 목록 (24시간 이내, 만료되지 않은 것, 조회한 것 제외)
   Future<List<ShotModel>> getUnviewedShots(String userId) async {
@@ -38,6 +40,8 @@ class ShotService {
       if (shot.authorId == userId) return false;
       // 이미 본 shots 제외
       if (viewedIds.contains(shot.id)) return false;
+      // 차단 유저의 shot 제외
+      if (_reportService.isBlocked(shot.authorId)) return false;
       return true;
     }).toList();
   }
@@ -59,7 +63,7 @@ class ShotService {
     // 조회한 Shots 중 아직 활성인 것들만
     final List<ShotModel> viewedShots = [];
     
-    // Firestore whereIn은 최대 10개까지만 지원하므로 배치로 처리
+    // Firestore whereIn은 최대 30개까지 지원하므로 30개씩 배치로 처리
     for (int i = 0; i < viewedIds.length; i += 30) {
       final batchIds = viewedIds.skip(i).take(30).toList();
       final shotsSnapshot = await _firestore
@@ -70,8 +74,10 @@ class ShotService {
       
       for (final doc in shotsSnapshot.docs) {
         final shot = ShotModel.fromFirestore(doc);
-        // 만료되지 않았고, 내 shot이 아닌 것만
-        if (!shot.isExpired && shot.authorId != userId) {
+        // 만료되지 않았고, 내 shot이 아니고, 차단하지 않은 사용자의 것만
+        if (!shot.isExpired
+            && shot.authorId != userId
+            && !_reportService.isBlocked(shot.authorId)) {
           viewedShots.add(shot);
         }
       }
@@ -105,6 +111,7 @@ class ShotService {
         if (excludeUserId != null && shot.authorId == excludeUserId) {
           return false;
         }
+        if (_reportService.isBlocked(shot.authorId)) return false;
         return true;
       }).toList();
     });
@@ -245,7 +252,10 @@ class ShotService {
         .where('isDeleted', isEqualTo: false)
         .orderBy('createdAt', descending: false)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) {
+        .map((snap) => snap.docs
+            .where((doc) =>
+                !_reportService.isBlocked(doc.data()['authorId'] ?? ''))
+            .map((doc) {
               final d = doc.data();
               return {
                 'id': doc.id,

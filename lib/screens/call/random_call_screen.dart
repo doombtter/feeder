@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:permission_handler/permission_handler.dart';
+import '../../core/utils/mic_permission.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/app_confirm_dialog.dart';
 import '../../core/widgets/membership_widgets.dart';
@@ -157,16 +157,12 @@ class _RandomCallScreenState extends State<RandomCallScreen>
   }
 
   Future<void> _startMatching() async {
-    // 마이크 권한 체크
-    final micStatus = await Permission.microphone.request();
-    if (!micStatus.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('음성 통화를 위해 마이크 권한이 필요합니다')),
-        );
-      }
-      return;
-    }
+    // 마이크 권한 체크 (영구 거부 시 설정앱 유도)
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 통화',
+    );
+    if (!granted) return;
 
     // 무료 횟수 소진 시 포인트 결제 다이얼로그
     if (_remainingCalls <= 0) {

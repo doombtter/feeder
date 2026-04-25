@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import '../../core/utils/mic_permission.dart';
 import '../../core/widgets/app_confirm_dialog.dart';
 import '../../core/widgets/image_picker_helper.dart';
 import '../../services/shot_service.dart';
@@ -85,15 +85,11 @@ class _ShotCreateScreenState extends State<ShotCreateScreen> {
   }
 
   Future<void> _startRecording() async {
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('마이크 권한이 필요합니다')),
-        );
-      }
-      return;
-    }
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 녹음',
+    );
+    if (!granted) return;
 
     _voiceModeNotifier.value = 'recording';
     _recordDurationNotifier.value = 0;

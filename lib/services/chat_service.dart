@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../core/constants/app_constants.dart';
 import '../models/chat_request_model.dart';
 import '../models/chat_room_model.dart';
@@ -6,6 +7,7 @@ import '../models/message_model.dart';
 import '../models/user_model.dart';
 import '../core/widgets/membership_widgets.dart';
 import 'notification_service.dart';
+import 'report_service.dart';
 
 class ChatService {
   // 싱글톤 패턴
@@ -14,14 +16,20 @@ class ChatService {
   ChatService._internal();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   final NotificationService _notificationService = NotificationService();
+  final ReportService _reportService = ReportService();
 
   /// 채팅 신청 비용 (P). AppConstants.chatRequestCost를 참조.
   static int get chatRequestCost => AppConstants.chatRequestCost;
 
   // ========== 일일 무료 채팅 ==========
 
-  // 일일 무료 채팅 사용 가능 여부 확인 (리셋 포함)
+  // 일일 무료 채팅 사용 가능 여부 확인 (순수 조회)
+  //
+  // 리셋 로직은 서버 consumeFreeChatQuota가 담당하므로 여기선 쓰기 없이 계산만 한다.
+  // 화면 상단의 "무료 N회 남음" 표시에 주로 쓰이며, 실제 사용 시점에 서버가
+  // 날짜 기준으로 다시 판단한다.
   Future<int> getAvailableDailyFreeChats(String userId) async {
     final userDoc = await _firestore.collection('users').doc(userId).get();
     final data = userDoc.data();
@@ -38,113 +46,80 @@ class ChatService {
     final resetDate = DateTime(resetAt.year, resetAt.month, resetAt.day);
     final today = DateTime(now.year, now.month, now.day);
 
-    // 날짜가 바뀌었으면 리셋
+    // 날짜가 바뀌었으면 표시상으론 최대값으로 본다.
+    // 실제 DB 쓰기는 서버 consumeFreeChatQuota가 담당.
     if (today.isAfter(resetDate)) {
-      await _firestore.collection('users').doc(userId).update({
-        'dailyFreeChats': maxFreeChats,
-        'dailyFreeChatsResetAt': Timestamp.fromDate(now),
-      });
       return maxFreeChats;
     }
 
     return dailyFreeChats;
   }
 
-  // 일일 무료 채팅 사용
+  // 일일 무료 채팅 사용 (서버 callable로 이전 — Stage 2-A)
+  //
+  // 클라이언트에서 직접 increment하던 로직을 서버로 옮겼다. 이유:
+  //   - dailyFreeChats 필드는 민감 필드로 분류되어 Rules에서 점차 잠글 예정
+  //   - KST 날짜 리셋 로직을 서버 시간 기준으로 통일해야 안전함
+  //   - 두 기기 동시 호출 시 race condition을 트랜잭션으로 방지
   Future<bool> useDailyFreeChat(String userId) async {
-    final available = await getAvailableDailyFreeChats(userId);
-    if (available <= 0) return false;
-
-    await _firestore.collection('users').doc(userId).update({
-      'dailyFreeChats': FieldValue.increment(-1),
-      'dailyFreeChatsResetAt': Timestamp.fromDate(DateTime.now()),
-    });
-    return true;
+    try {
+      final callable = _functions.httpsCallable('consumeFreeChatQuota');
+      final result = await callable.call();
+      final data = Map<String, dynamic>.from(result.data as Map);
+      return data['success'] == true && data['consumed'] == true;
+    } on FirebaseFunctionsException catch (e) {
+      // 로그인 안 됨, 유저 없음 등 → 사용 실패로 간주
+      return false;
+    }
   }
 
   // ========== 채팅 신청 ==========
 
-  // 채팅 신청 보내기 (무료 채팅 우선 사용)
+  // 채팅 신청 보내기 (서버 callable — Stage 2-A)
+  //
+  // 클라이언트의 기존 로직을 서버 트랜잭션으로 이전했다. 서버가 처리하는 것:
+  //   - 기존 채팅방 중복 체크 (race 방지)
+  //   - 무료 채팅 가용량 계산 (KST 기준 리셋)
+  //   - 무료 채팅 또는 포인트 차감
+  //   - chatRequests 문서 생성
+  //   - 포인트 차감 시 pointTransactions 로그
+  //   - 수신자 알림 발송
+  //
+  // 반환 형태는 기존 API와 호환:
+  //   { success: true, usedFreeChat: bool, requestId?: string }
+  //   { success: false, error: 'insufficient_points' | 'already_chatting' | 'self_request' }
+  //
+  // 클라이언트 방어 가드(차단)는 서버 호출 전에 유지.
   Future<Map<String, dynamic>> sendChatRequest({
     required String fromUserId,
     required String toUserId,
     required UserModel fromUser,
     String? message,
   }) async {
-    // 이미 채팅방이 있는지 확인 (채팅 중인 상대에게는 신청 불가)
-    final existingRoom = await _firestore
-        .collection('chatRooms')
-        .where('participants', arrayContains: fromUserId)
-        .where('isActive', isEqualTo: true)
-        .get();
-    
-    for (final doc in existingRoom.docs) {
-      final participants = List<String>.from(doc.data()['participants'] ?? []);
-      if (participants.contains(toUserId)) {
-        return {'success': false, 'error': 'already_chatting', 'chatRoomId': doc.id};
-      }
+    // 차단한 상대에게는 신청을 보낼 수 없다 (방어 코드 - UI에서 이미 안 보이지만)
+    if (_reportService.isBlocked(toUserId)) {
+      return {'success': false, 'error': 'blocked'};
     }
 
-    // 무료 채팅 확인
-    final freeChats = await getAvailableDailyFreeChats(fromUserId);
-    final useFreeChat = freeChats > 0;
-
-    // 무료 채팅이 없으면 포인트 확인
-    if (!useFreeChat) {
-      final userDoc = await _firestore.collection('users').doc(fromUserId).get();
-      final currentPoints = userDoc.data()?['points'] ?? 0;
-
-      if (currentPoints < chatRequestCost) {
-        return {'success': false, 'error': 'insufficient_points'};
-      }
-    }
-
-    final batch = _firestore.batch();
-
-    // 무료 채팅 사용 또는 포인트 차감
-    final userRef = _firestore.collection('users').doc(fromUserId);
-    if (useFreeChat) {
-      batch.update(userRef, {
-        'dailyFreeChats': FieldValue.increment(-1),
-        'dailyFreeChatsResetAt': Timestamp.fromDate(DateTime.now()),
+    try {
+      final callable = _functions.httpsCallable('sendChatRequest');
+      final result = await callable.call({
+        'toUserId': toUserId,
+        if (message != null) 'message': message,
       });
-    } else {
-      batch.update(userRef, {
-        'points': FieldValue.increment(-chatRequestCost),
-      });
+      return Map<String, dynamic>.from(result.data as Map);
+    } on FirebaseFunctionsException catch (e) {
+      // 서버에서 명시적으로 던진 HttpsError → 에러 코드 매핑
+      if (e.code == 'unauthenticated') {
+        return {'success': false, 'error': 'unauthenticated'};
+      }
+      if (e.code == 'invalid-argument') {
+        return {'success': false, 'error': 'invalid_argument'};
+      }
+      return {'success': false, 'error': 'internal'};
+    } catch (e) {
+      return {'success': false, 'error': 'internal'};
     }
-
-    // 채팅 신청 생성
-    final requestRef = _firestore.collection('chatRequests').doc();
-    final now = DateTime.now();
-    batch.set(requestRef, {
-      'fromUserId': fromUserId,
-      'toUserId': toUserId,
-      'fromUserNickname': fromUser.nickname,
-      'fromUserProfileImageUrl': fromUser.profileImageUrl,
-      'fromUserGender': fromUser.gender,
-      'message': message,
-      'pointsSpent': useFreeChat ? 0 : chatRequestCost,
-      'usedFreeChat': useFreeChat,
-      'status': 'pending',
-      'createdAt': Timestamp.fromDate(now),
-      'respondedAt': null,
-      'expiresAt': Timestamp.fromDate(now.add(const Duration(days: 7))),
-    });
-
-    // 참고: receivedRequestCount는 chatRequests 쿼리로 실시간 계산
-    // 상대방 문서 업데이트 제거 (권한 문제 해결)
-
-    await batch.commit();
-
-    // 알림 전송
-    await _notificationService.sendChatRequestNotification(
-      toUserId: toUserId,
-      fromUserId: fromUserId,
-      fromUserGender: fromUser.gender,
-    );
-
-    return {'success': true, 'usedFreeChat': useFreeChat};
   }
 
   // 받은 채팅 신청 목록
@@ -159,6 +134,7 @@ class ChatService {
       return snapshot.docs
           .map((doc) => ChatRequestModel.fromFirestore(doc))
           .where((request) => !request.isExpired)
+          .where((request) => !_reportService.isBlocked(request.fromUserId))
           .toList();
     });
   }
@@ -177,75 +153,39 @@ class ChatService {
     });
   }
 
-  // 채팅 신청 수락
+  // 채팅 신청 수락 (서버 callable — Stage 2-A)
+  //
+  // 서버가 트랜잭션으로 처리하는 것:
+  //   - 신청 상태를 pending→accepted로 변경
+  //   - 채팅방 생성 (participants + participantProfiles)
+  //   - 수신자(나)의 receivedRequestCount 감소
+  //   - 신청자에게 수락 알림
+  //
+  // [myUser]는 시그니처 호환용으로만 받는다(내부에서는 서버가 자기 프로필을 읽음).
   Future<String> acceptRequest(ChatRequestModel request, UserModel myUser) async {
-    final batch = _firestore.batch();
-
-    // 신청 상태 변경
-    final requestRef = _firestore.collection('chatRequests').doc(request.id);
-    batch.update(requestRef, {
-      'status': 'accepted',
-      'respondedAt': FieldValue.serverTimestamp(),
-    });
-
-    // 내 receivedRequestCount 감소
-    final myUserRef = _firestore.collection('users').doc(request.toUserId);
-    batch.update(myUserRef, {
-      'receivedRequestCount': FieldValue.increment(-1),
-    });
-
-    // 채팅방 생성
-    final chatRoomRef = _firestore.collection('chatRooms').doc();
-    batch.set(chatRoomRef, {
-      'participants': [request.fromUserId, request.toUserId],
-      'participantProfiles': {
-        request.fromUserId: {
-          'nickname': request.fromUserNickname,
-          'profileImageUrl': request.fromUserProfileImageUrl,
-          'gender': request.fromUserGender,
-        },
-        request.toUserId: {
-          'nickname': myUser.nickname,
-          'profileImageUrl': myUser.profileImageUrl,
-          'gender': myUser.gender,
-        },
-      },
-      'lastMessage': '',
-      'lastMessageAt': null,
-      'createdAt': FieldValue.serverTimestamp(),
-      'isActive': true,
-    });
-
-    await batch.commit();
-
-    // 알림 전송 (신청자에게)
-    await _notificationService.sendChatAcceptedNotification(
-      toUserId: request.fromUserId,
-      chatRoomId: chatRoomRef.id,
-      accepterGender: myUser.gender,
-    );
-
-    return chatRoomRef.id;
+    try {
+      final callable = _functions.httpsCallable('acceptChatRequest');
+      final result = await callable.call({'requestId': request.id});
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final chatRoomId = data['chatRoomId'] as String?;
+      if (chatRoomId == null || chatRoomId.isEmpty) {
+        throw Exception('채팅방 생성 실패');
+      }
+      return chatRoomId;
+    } on FirebaseFunctionsException catch (e) {
+      // 이미 처리된 신청이면 메시지 그대로 상위에 전달
+      throw Exception(e.message ?? '신청 수락 실패: ${e.code}');
+    }
   }
 
-  // 채팅 신청 거절
+  // 채팅 신청 거절 (서버 callable — Stage 2-A)
   Future<void> rejectRequest(ChatRequestModel request) async {
-    final batch = _firestore.batch();
-
-    // 신청 상태 변경
-    final requestRef = _firestore.collection('chatRequests').doc(request.id);
-    batch.update(requestRef, {
-      'status': 'rejected',
-      'respondedAt': FieldValue.serverTimestamp(),
-    });
-
-    // 내 receivedRequestCount 감소
-    final myUserRef = _firestore.collection('users').doc(request.toUserId);
-    batch.update(myUserRef, {
-      'receivedRequestCount': FieldValue.increment(-1),
-    });
-
-    await batch.commit();
+    try {
+      final callable = _functions.httpsCallable('rejectChatRequest');
+      await callable.call({'requestId': request.id});
+    } on FirebaseFunctionsException catch (e) {
+      throw Exception(e.message ?? '신청 거절 실패: ${e.code}');
+    }
   }
 
   // ========== 채팅방 ==========
@@ -261,6 +201,14 @@ class ChatService {
         .map((snapshot) {
       return snapshot.docs
           .map((doc) => ChatRoomModel.fromFirestore(doc))
+          .where((room) {
+            // 상대방을 차단했다면 채팅방 목록에서 숨긴다.
+            final otherUid = room.participants.firstWhere(
+              (uid) => uid != userId,
+              orElse: () => '',
+            );
+            return otherUid.isEmpty || !_reportService.isBlocked(otherUid);
+          })
           .toList();
     });
   }

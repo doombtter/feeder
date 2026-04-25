@@ -5,6 +5,7 @@ import '../../../models/shot_model.dart';
 import '../../../services/shot_service.dart';
 import '../../../services/user_service.dart';
 import '../../../services/s3_service.dart';
+import '../../../core/utils/mic_permission.dart';
 import '../../../core/widgets/voice/voice.dart';
 import 'shot_common_widgets.dart';
 
@@ -323,10 +324,16 @@ class _ShotCommentInputState extends State<_ShotCommentInput> {
   }
 
   Future<void> _startRecording() async {
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 댓글',
+    );
+    if (!granted) return;
+
     final success = await _voiceController.startRecording();
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('마이크 권한이 필요합니다')),
+        const SnackBar(content: Text('녹음을 시작할 수 없습니다')),
       );
     }
   }

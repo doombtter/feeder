@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:feeder/core/constants/app_constants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
+import 'report_service.dart';
 
 class UserService {
   // 싱글톤 패턴
@@ -12,6 +14,8 @@ class UserService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final ReportService _reportService = ReportService();
 
   // 유저 정보 가져오기
   Future<UserModel?> getUser(String uid) async {
@@ -213,6 +217,7 @@ class UserService {
           .where((user) => user.uid != currentUid)
           .where((user) => user.isProfileComplete)
           .where((user) => genderFilter == null || user.gender == genderFilter)
+          .where((user) => !_reportService.isBlocked(user.uid))
           .take(limit)
           .toList();
 
@@ -247,6 +252,7 @@ class UserService {
         .where((user) => !user.isOnline)  // 오프라인만
         .where((user) => user.lastSeenAt != null && user.lastSeenAt!.isAfter(sevenDaysAgo))
         .where((user) => genderFilter == null || user.gender == genderFilter)
+        .where((user) => !_reportService.isBlocked(user.uid))
         .take(limit)
         .toList();
 
@@ -274,6 +280,7 @@ class UserService {
           .where((user) => user.uid != currentUid)
           .where((user) => user.isProfileComplete)
           .where((user) => genderFilter == null || user.gender == genderFilter)
+          .where((user) => !_reportService.isBlocked(user.uid))
           .take(limit)
           .toList();
 
@@ -303,6 +310,7 @@ class UserService {
         .where((user) => user.uid != currentUid)
         .where((user) => user.isProfileComplete)
         .where((user) => genderFilter == null || user.gender == genderFilter)
+        .where((user) => !_reportService.isBlocked(user.uid))
         .take(limit)
         .toList();
 
@@ -356,40 +364,28 @@ class UserService {
     return (canView: remaining > 0, remaining: remaining, used: usedToday);
   }
 
-  /// 프로필 조회 쿼터 차감 (MAX 전용)
-  Future<bool> useProfileViewQuota(String uid) async {
+  /// 프로필 조회 쿼터 차감 (MAX 전용) — 서버 callable (Stage 2-B)
+  ///
+  /// 서버가 트랜잭션으로 처리:
+  ///   - isMax 재검증
+  ///   - 날짜 리셋 (KST 기준)
+  ///   - 한도 체크 (일 2회)
+  ///   - dailyProfileViewCount 증가
+  ///   - (선택) profileViews 서브컬렉션에 감사 로그
+  ///
+  /// [targetUid]가 제공되면 서버 감사 로그에 저장되어 남용 패턴 추적에 쓰임.
+  /// 기존 호출처와 호환을 위해 반환 타입은 bool로 유지.
+  Future<bool> useProfileViewQuota(String uid, {String? targetUid}) async {
     try {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      
-      final doc = await _firestore.collection('users').doc(uid).get();
-      if (!doc.exists) return false;
-      
-      final user = UserModel.fromFirestore(doc);
-      if (!user.isMax) return false;
-      
-      int usedToday = user.dailyProfileViewCount;
-      
-      // 일일 리셋 체크
-      if (user.dailyProfileViewResetAt != null) {
-        final resetDate = DateTime(
-          user.dailyProfileViewResetAt!.year,
-          user.dailyProfileViewResetAt!.month,
-          user.dailyProfileViewResetAt!.day,
-        );
-        
-        if (today.isAfter(resetDate)) {
-          usedToday = 0;
-        }
-      }
-      
-      await _firestore.collection('users').doc(uid).update({
-        'dailyProfileViewCount': usedToday + 1,
-        'dailyProfileViewResetAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+      final callable = _functions.httpsCallable('recordProfileView');
+      final result = await callable.call({
+        if (targetUid != null) 'targetUid': targetUid,
       });
-      
-      return true;
+      final data = Map<String, dynamic>.from(result.data as Map);
+      return data['success'] == true;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('프로필 조회 쿼터 차감 실패: ${e.code} ${e.message}');
+      return false;
     } catch (e) {
       debugPrint('프로필 조회 쿼터 차감 실패: $e');
       return false;

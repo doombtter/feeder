@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/mic_permission.dart';
 import '../../core/widgets/app_confirm_dialog.dart';
 import '../../core/widgets/image_picker_helper.dart';
 import '../../core/widgets/voice/voice.dart';
@@ -52,10 +53,16 @@ class _PostWriteScreenState extends State<PostWriteScreen> {
   }
 
   Future<void> _startRecording() async {
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 녹음',
+    );
+    if (!granted) return;
+
     final success = await _voiceController.startRecording();
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('마이크 권한이 필요합니다')),
+        const SnackBar(content: Text('녹음을 시작할 수 없습니다')),
       );
     }
   }

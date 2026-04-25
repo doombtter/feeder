@@ -6,7 +6,7 @@ class AppConstants {
 
   // 앱 정보
   static const String appName = '피더';
-  static const String appVersion = '1.0.1';
+  static const String appVersion = '1.0.2';
 
   // 제한값
   static const int maxPostLength = 500;

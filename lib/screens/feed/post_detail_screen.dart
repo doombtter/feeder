@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import '../../core/utils/mic_permission.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/membership_widgets.dart';
 import '../../models/post_model.dart';
@@ -618,15 +618,11 @@ class _CommentInputWidgetState extends State<_CommentInputWidget> {
   }
 
   Future<void> _startRecording() async {
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('마이크 권한이 필요합니다')),
-        );
-      }
-      return;
-    }
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 댓글',
+    );
+    if (!granted) return;
 
     if (!_isRecorderInitialized) {
       await _initRecorder();

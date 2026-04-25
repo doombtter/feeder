@@ -1040,3 +1040,13 @@ exports.getAgoraToken = onCall(async (request) => {
   return { token };
 });
 
+const chatCallables = require("./chat");
+
+exports.consumeFreeChatQuota = chatCallables.consumeFreeChatQuota;
+exports.sendChatRequest = chatCallables.sendChatRequest;
+exports.acceptChatRequest = chatCallables.acceptChatRequest;
+exports.rejectChatRequest = chatCallables.rejectChatRequest;
+
+const profileViewCallables = require("./profile_view");
+
+exports.recordProfileView = profileViewCallables.recordProfileView;

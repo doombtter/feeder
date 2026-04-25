@@ -68,6 +68,8 @@
 		<string>음성 메시지 녹음 및 영상 통화를 위해 마이크 접근 권한이 필요합니다.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>사진을 저장하기 위해 사진 라이브러리 접근 권한이 필요합니다.</string>
+		<key>NSUserTrackingUsageDescription</key>
+		<string>관심사에 더 잘 맞는 광고를 보여드리기 위해 사용됩니다. 거부해도 앱의 모든 기능을 그대로 이용하실 수 있어요.</string>
 
 		<key>UIApplicationSceneManifest</key>
 		<dict>

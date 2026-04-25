@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/mic_permission.dart';
 import '../../../core/widgets/image_picker_helper.dart';
 import '../../../core/widgets/voice/voice.dart';
 import '../../../core/widgets/membership_widgets.dart';
@@ -222,10 +223,17 @@ class _ChatInputBarState extends State<ChatInputBar> with SingleTickerProviderSt
 
   Future<void> _startRecording() async {
     _closeMediaMenu();
+
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 메시지',
+    );
+    if (!granted) return;
+
     final success = await _voiceController.startRecording();
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('마이크 권한이 필요합니다')),
+        const SnackBar(content: Text('녹음을 시작할 수 없습니다')),
       );
     }
   }

@@ -4,12 +4,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
-import 'package:permission_handler/permission_handler.dart';
+import '../../core/utils/mic_permission.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../core/constants/app_constants.dart';
 import '../../models/user_model.dart';
+import '../../models/report_model.dart';
 import '../../services/random_call_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/report_service.dart';
+import '../common/report_dialog.dart';
 
 /// 음성 통화 화면 (Agora SDK 연동)
 /// - 통화 중 익명 표시
@@ -32,6 +35,7 @@ class VoiceCallScreen extends StatefulWidget {
 class _VoiceCallScreenState extends State<VoiceCallScreen> {
   final _callService = RandomCallService();
   final _chatService = ChatService();
+  final _reportService = ReportService();
   final _firestore = FirebaseFirestore.instance;
   final _currentUid = FirebaseAuth.instance.currentUser?.uid;
 
@@ -90,11 +94,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   // ══════════════════════════════════════════════════════════════
 
   Future<void> _initAgora() async {
-    // 마이크 권한 확인
-    final micPermission = await Permission.microphone.request();
+    // 마이크 권한 확인 (영구 거부 시 설정앱 유도)
+    final granted = await MicPermission.requestWithGuidance(
+      context,
+      purpose: '음성 통화',
+    );
     if (!mounted) return;
-    
-    if (!micPermission.isGranted) {
+
+    if (!granted) {
       setState(() => _errorMessage = '마이크 권한이 필요합니다');
       return;
     }
@@ -140,6 +147,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             setState(() => _isRemoteUserJoined = true);
             _startDurationTimer();
             _startMaxDurationTimer();
+            _showSafetyNotice();
           }
         },
         onUserOffline: (connection, remoteUid, reason) {
@@ -283,7 +291,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     setState(() => _isSpeakerOn = newSpeakerState);
   }
 
-  Future<void> _endCall({bool saveHistory = true}) async {
+  Future<void> _endCall({
+    bool saveHistory = true,
+    bool skipEndDialog = false,
+  }) async {
     _durationTimer?.cancel();
     _maxDurationTimer?.cancel();
 
@@ -307,6 +318,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       );
     }
 
+    // 신고/차단으로 종료된 경우엔 종료 다이얼로그를 띄우지 않고 곧장 화면 이탈.
+    if (skipEndDialog) {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
     // 통화 종료 다이얼로그 (친구 요청 옵션) - 30초 이상 통화 시
     if (mounted && _callDuration >= 30) {
       _showCallEndDialog(partnerLeft: false);
@@ -319,7 +336,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
@@ -328,12 +345,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              partnerLeft 
+              partnerLeft
                   ? '상대방이 통화를 종료했습니다.'
                   : '통화 시간: ${_formatDuration(_callDuration)}',
               style: const TextStyle(color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
             ),
             if (_callDuration >= 30) ...[
               const SizedBox(height: 16),
@@ -343,23 +362,52 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 textAlign: TextAlign.center,
               ),
             ],
+            const SizedBox(height: 20),
+            // 신고/차단 옵션 (App Store 정책 대응 - 부적절한 행동 즉시 신고 동선)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: AppColors.border.withValues(alpha: 0.3),
+                  ),
+                ),
+              ),
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  _showReportSheet();
+                },
+                icon: const Icon(Icons.flag_outlined,
+                    size: 16, color: AppColors.error),
+                label: const Text(
+                  '부적절한 행동이 있었나요? 신고/차단하기',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
+              if (mounted) Navigator.pop(context);
             },
-            child: const Text('닫기', style: TextStyle(color: AppColors.textTertiary)),
+            child: const Text('닫기',
+                style: TextStyle(color: AppColors.textTertiary)),
           ),
           if (_callDuration >= 30)
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 _sendFriendRequest();
               },
-              child: const Text('친구 요청', style: TextStyle(color: AppColors.primary)),
+              child: const Text('친구 요청',
+                  style: TextStyle(color: AppColors.primary)),
             ),
         ],
       ),
@@ -419,6 +467,200 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   }
 
   // ══════════════════════════════════════════════════════════════
+  // 신고 / 차단 (App Store Guideline 1.2 대응)
+  // ══════════════════════════════════════════════════════════════
+
+  /// 통화 시작 시 1회 노출되는 안전 안내.
+  /// "부적절한 행동은 즉시 신고할 수 있다"는 점을 사용자에게 인지시킨다.
+  void _showSafetyNotice() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.shield_rounded, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '부적절한 행동이 있으면 우상단 신고 버튼을 눌러주세요',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.primary.withValues(alpha: 0.9),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// 신고/차단 옵션 시트.
+  /// 통화 중 우상단 신고 버튼, 통화 종료 다이얼로그에서 모두 사용된다.
+  Future<void> _showReportSheet() async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textTertiary.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '이 사용자',
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 8),
+            // 신고
+            ListTile(
+              leading: const Icon(Icons.flag_rounded, color: AppColors.error),
+              title: const Text(
+                '신고하기',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: const Text(
+                '부적절한 행동을 신고합니다',
+                style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+              ),
+              onTap: () => Navigator.pop(context, 'report'),
+            ),
+            // 차단
+            ListTile(
+              leading: const Icon(Icons.block_rounded, color: AppColors.error),
+              title: const Text(
+                '차단하기',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: const Text(
+                '이 사용자와 다시 매칭되지 않습니다',
+                style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+              ),
+              onTap: () => Navigator.pop(context, 'block'),
+            ),
+            // 취소
+            ListTile(
+              leading: const Icon(Icons.close_rounded,
+                  color: AppColors.textTertiary),
+              title: const Text(
+                '취소',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              onTap: () => Navigator.pop(context),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (result == 'report') {
+      await _handleReport();
+    } else if (result == 'block') {
+      await _handleBlock();
+    }
+  }
+
+  /// 신고 다이얼로그를 띄워 신고 사유를 받고 ReportService에 기록.
+  Future<void> _handleReport() async {
+    final submitted = await showReportDialog(
+      context,
+      targetId: widget.partnerUid,
+      targetType: ReportTargetType.user,
+      targetName: '익명 사용자',
+    );
+
+    if (!mounted) return;
+
+    // 신고가 접수되면 통화는 즉시 종료한다.
+    // 사용자 안전을 위해 신고 후 바로 빠져나갈 수 있도록.
+    if (submitted == true) {
+      await _endCall(saveHistory: true, skipEndDialog: true);
+    }
+  }
+
+  /// 사용자 차단. ReportService.blockUser 호출 후 통화 종료.
+  Future<void> _handleBlock() async {
+    if (_currentUid == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          '차단하시겠어요?',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: const Text(
+          '차단한 사용자와는 다시 매칭되지 않으며,\n서로의 게시글과 프로필이 보이지 않습니다.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              '취소',
+              style: TextStyle(color: AppColors.textTertiary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              '차단',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _reportService.blockUser(_currentUid!, widget.partnerUid);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('차단되었습니다')),
+        );
+        await _endCall(saveHistory: false, skipEndDialog: true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('차단 실패: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
   // UI
   // ══════════════════════════════════════════════════════════════
 
@@ -429,17 +671,65 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       body: SafeArea(
         child: _errorMessage != null
             ? _buildErrorView()
-            : Column(
+            : Stack(
                 children: [
-                  const Spacer(),
-                  _buildPartnerInfo(),
-                  const Spacer(),
-                  _buildCallStatus(),
-                  const SizedBox(height: 48),
-                  _buildControls(),
-                  const SizedBox(height: 48),
+                  Column(
+                    children: [
+                      const Spacer(),
+                      _buildPartnerInfo(),
+                      const Spacer(),
+                      _buildCallStatus(),
+                      const SizedBox(height: 48),
+                      _buildControls(),
+                      const SizedBox(height: 48),
+                    ],
+                  ),
+                  // 통화 중 상시 노출되는 신고 버튼 (App Store Guideline 1.2 대응)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: _buildReportButton(),
+                  ),
                 ],
               ),
+      ),
+    );
+  }
+
+  /// 통화 중 상시 노출 신고 버튼.
+  /// 부적절한 행동을 즉시 신고할 수 있도록 우상단에 배치.
+  Widget _buildReportButton() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showReportSheet,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.flag_rounded, color: Colors.white, size: 16),
+              SizedBox(width: 4),
+              Text(
+                '신고',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
 import 'notification_service.dart';
+import 'report_service.dart';
 
 class PostService {
   // 싱글톤 패턴
@@ -11,6 +12,7 @@ class PostService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
+  final ReportService _reportService = ReportService();
 
   // 단일 게시글 조회
   Future<PostModel?> getPost(String postId) async {
@@ -32,6 +34,7 @@ class PostService {
       return snapshot.docs
           .map((doc) => PostModel.fromFirestore(doc))
           .where((post) => !post.isDeleted)
+          .where((post) => !_reportService.isBlocked(post.authorId))
           .toList();
     });
   }
@@ -52,7 +55,10 @@ class PostService {
     }
 
     final snapshot = await query.get();
-    return snapshot.docs.map((doc) => PostModel.fromFirestore(doc)).toList();
+    return snapshot.docs
+        .map((doc) => PostModel.fromFirestore(doc))
+        .where((post) => !_reportService.isBlocked(post.authorId))
+        .toList();
   }
 
   // 게시글 문서 가져오기 (페이지네이션용)
@@ -227,8 +233,12 @@ class PostService {
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snapshot) {
+      // 차단 유저의 댓글은 노출하지 않는다.
+      // 부모 댓글이 차단으로 가려지면 그에 달린 대댓글은 부모를 찾지 못해
+      // 자연스럽게 결과에서 누락된다 (맥락 단절 방지).
       final allComments = snapshot.docs
           .map((doc) => CommentModel.fromFirestore(doc, postId))
+          .where((c) => !_reportService.isBlocked(c.authorId))
           .toList();
 
       final List<CommentModel> sortedComments = [];

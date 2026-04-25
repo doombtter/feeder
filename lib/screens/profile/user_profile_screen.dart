@@ -50,11 +50,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
   }
 
-  Future<void> _checkBlocked() async {
-    final blocked = await _reportService.isBlocked(_uid, widget.userId);
-    if (mounted) {
-      setState(() => _isBlocked = blocked);
-    }
+  /// 차단 여부를 동기적으로 확인.
+  /// ReportService가 로그인 시점부터 차단 목록을 캐싱하고 있으므로
+  /// 네트워크 호출 없이 즉시 조회 가능.
+  void _checkBlocked() {
+    if (!mounted) return;
+    setState(() => _isBlocked = _reportService.isBlocked(widget.userId));
   }
 
   Future<void> _toggleBlock() async {

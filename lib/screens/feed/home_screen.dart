@@ -52,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   MembershipTier _membershipTier = MembershipTier.free;
   bool get _isPremium => _membershipTier != MembershipTier.free;
   bool _isSuspended = false;
+  DateTime? _suspensionExpiresAt;
   final _interstitialController = InterstitialAdController();
 
   // Feed 새로고침용 키
@@ -81,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? MembershipTier.max 
             : (user.isPremium ? MembershipTier.premium : MembershipTier.free);
         _isSuspended = user.isSuspended;
+        _suspensionExpiresAt = user.suspensionExpiresAt;
       });
       
       // 정지 상태면 My 탭으로 이동
@@ -778,8 +780,11 @@ class _PostCardState extends State<_PostCard> {
 
     if (confirm != true) return;
 
-    // 쿼터 차감
-    final success = await _userService.useProfileViewQuota(uid);
+    // 쿼터 차감 (감사 로그용 targetUid 전달)
+    final success = await _userService.useProfileViewQuota(
+      uid,
+      targetUid: widget.post.authorId,
+    );
     if (!success) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

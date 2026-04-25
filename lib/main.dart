@@ -11,6 +11,7 @@ import 'services/admob_service.dart';
 import 'services/device_service.dart';
 import 'services/post_service.dart';
 import 'services/purchase_service.dart';
+import 'services/report_service.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 // Core
@@ -65,7 +66,7 @@ void main() async {
 
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
-  await AdMobService.initialize();
+  AdMobService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // 💰 인앱 결제 초기화 (purchaseStream 리스너를 앱 시작 시 활성화)
@@ -298,6 +299,7 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   late final Stream<User?> _authStream;
+  StreamSubscription<User?>? _authSub;
 
   // 새 로그인(소셜 로그인 직접 수행)인지 여부
   static bool _isNewLogin = false;
@@ -320,6 +322,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     // 딜레이 없이 바로 authStateChanges 연결
     _authStream = FirebaseAuth.instance.authStateChanges();
+
+    // 차단 캐시 lifecycle 관리.
+    // 로그인 시작/로그아웃 시점에 ReportService 캐시를 켜고 끈다.
+    // build 내에서 부수효과를 일으키지 않도록 별도 구독을 둔다.
+    _authSub = _authStream.listen((user) {
+      if (user != null) {
+        ReportService().startBlockedUsersCache(user.uid);
+      } else {
+        ReportService().stopBlockedUsersCache();
+      }
+    });
+
+    // 앱 시작 시 이미 로그인되어 있으면 즉시 캐시 시작
+    final initialUser = FirebaseAuth.instance.currentUser;
+    if (initialUser != null) {
+      ReportService().startBlockedUsersCache(initialUser.uid);
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   void _showOptionalUpdateDialog(BuildContext context) {
@@ -361,9 +386,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
         final user = snapshot.data;
 
         if (user == null) {
-          // 비로그인 상태 → 소셜 로그인 화면
-          AuthWrapper.resetSession();
-          return const SocialLoginScreen();
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('유저 정보를 불러올 수 없습니다'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await FirebaseAuth.instance.signOut();
+                    },
+                    child: Text('다시 로그인하기'),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
         // 전화번호 연동 여부 확인
@@ -518,23 +558,8 @@ class _ProfileCheckWrapperState extends State<ProfileCheckWrapper> {
 
         // null이면 그냥 아무것도 안그림
         if (user == null) {
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('유저 정보를 불러올 수 없습니다'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      await FirebaseAuth.instance.signOut();
-                    },
-                    child: Text('다시 로그인하기'),
-                  ),
-                ],
-              ),
-            ),
+          return const Scaffold(
+            body: Center(child: Text('유저 정보를 불러올 수 없습니다')),
           );
         }
 
