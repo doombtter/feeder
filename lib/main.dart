@@ -66,7 +66,7 @@ void main() async {
 
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
-  AdMobService.initialize();
+  await AdMobService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // 💰 인앱 결제 초기화 (purchaseStream 리스너를 앱 시작 시 활성화)
