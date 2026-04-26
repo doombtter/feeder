@@ -7,12 +7,14 @@ class ReportDialog extends StatefulWidget {
   final String targetId;
   final ReportTargetType targetType;
   final String? targetName;
+  final String? postId; // 댓글 신고 시 댓글이 속한 게시글 ID
 
   const ReportDialog({
     super.key,
     required this.targetId,
     required this.targetType,
     this.targetName,
+    this.postId,
   });
 
   @override
@@ -51,6 +53,7 @@ class _ReportDialogState extends State<ReportDialog> {
         description: _descriptionController.text.trim().isNotEmpty
             ? _descriptionController.text.trim()
             : null,
+        postId: widget.postId,
       );
 
       if (mounted) {
@@ -194,6 +197,7 @@ Future<bool?> showReportDialog(
   required String targetId,
   required ReportTargetType targetType,
   String? targetName,
+  String? postId, // 댓글 신고 시 댓글이 속한 게시글 ID
 }) {
   return showDialog<bool>(
     context: context,
@@ -201,6 +205,7 @@ Future<bool?> showReportDialog(
       targetId: targetId,
       targetType: targetType,
       targetName: targetName,
+      postId: postId,
     ),
   );
 }

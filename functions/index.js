@@ -1050,3 +1050,26 @@ exports.rejectChatRequest = chatCallables.rejectChatRequest;
 const profileViewCallables = require("./profile_view");
 
 exports.recordProfileView = profileViewCallables.recordProfileView;
+
+const adminCallables = require("./admin_actions");
+
+// 사용자 조회/검색 (Profile + Auth 통합)
+exports.adminGetUser               = adminCallables.adminGetUser;
+exports.adminSearchUsersByUid      = adminCallables.adminSearchUsersByUid;
+exports.adminSearchUsersByPhone    = adminCallables.adminSearchUsersByPhone;
+exports.adminSearchUsersByNickname = adminCallables.adminSearchUsersByNickname;
+exports.adminListRecentUsers       = adminCallables.adminListRecentUsers;
+
+// 콘텐츠 강제 삭제
+exports.adminDeletePost    = adminCallables.adminDeletePost;
+exports.adminDeleteComment = adminCallables.adminDeleteComment;
+exports.adminDeleteMessage = adminCallables.adminDeleteMessage;
+
+// 사용자 정지 / 해제
+exports.adminSuspendUser   = adminCallables.adminSuspendUser;
+exports.adminUnsuspendUser = adminCallables.adminUnsuspendUser;
+
+// 신고 처리
+exports.adminResolveReport = adminCallables.adminResolveReport;
+
+exports.cleanupExpiredSuspensions = adminCallables.cleanupExpiredSuspensions;

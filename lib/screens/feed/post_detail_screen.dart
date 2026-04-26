@@ -480,6 +480,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 context,
                                 targetId: comment.id,
                                 targetType: ReportTargetType.comment,
+                                postId: widget.post.id,
                               );
                             },
                           );

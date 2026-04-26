@@ -98,7 +98,15 @@ class ReportService {
     required ReportTargetType targetType,
     required ReportType reportType,
     String? description,
+    String? postId, // 댓글 신고 시 댓글이 속한 게시글 ID (어드민 추적용)
   }) async {
+    // 댓글 신고는 postId가 반드시 있어야 어드민이 댓글을 찾아갈 수 있음
+    // (Firestore 구조: posts/{postId}/comments/{commentId})
+    if (targetType == ReportTargetType.comment &&
+        (postId == null || postId.isEmpty)) {
+      throw ArgumentError('댓글 신고는 postId가 필요합니다');
+    }
+
     // 이미 신고했는지 확인
     final existing = await _firestore
         .collection('reports')
@@ -120,6 +128,7 @@ class ReportService {
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
       'resolvedAt': null,
+      if (postId != null) 'postId': postId,
     });
   }
 

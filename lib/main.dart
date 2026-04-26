@@ -386,24 +386,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         final user = snapshot.data;
 
         if (user == null) {
-          return Scaffold(
-            backgroundColor: AppColors.background,
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('유저 정보를 불러올 수 없습니다'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () async {
-                      await FirebaseAuth.instance.signOut();
-                    },
-                    child: Text('다시 로그인하기'),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return const SocialLoginScreen(); // ← 이렇게 바꾸기
         }
 
         // 전화번호 연동 여부 확인

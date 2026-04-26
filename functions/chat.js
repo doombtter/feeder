@@ -242,7 +242,13 @@ exports.sendChatRequest = onCall(async (request) => {
         ),
       });
 
-      return { insufficient: false, usedFreeChat, fromUserData };
+      // 트랜잭션 결과로 외부에 넘길 값들.
+      // 변수명 useFreeChat을 그대로 키로 쓰면 shorthand property라 헷갈리므로 명시.
+      return {
+        insufficient: false,
+        useFreeChat: useFreeChat,
+        fromUserData: fromUserData,
+      };
     });
 
     if (result.insufficient) {
@@ -275,7 +281,7 @@ exports.sendChatRequest = onCall(async (request) => {
 
     return {
       success: true,
-      usedFreeChat: result.usedFreeChat,
+      usedFreeChat: result.useFreeChat,
       requestId: requestRef.id,
     };
   } catch (error) {
